@@ -6,6 +6,13 @@ final class PhotosIntegrationTests: XCTestCase {
         let photos = XCUIApplication(bundleIdentifier: "com.apple.mobileslideshow")
         photos.launch()
         sleep(3)
+        // A fresh iOS 26 Photos install puts a “What’s New” sheet above the
+        // library.  The grid is already present in the accessibility tree but
+        // cannot receive taps until that sheet is dismissed.
+        let continueButton = photos.buttons["Continue"]
+        if continueButton.waitForExistence(timeout: 3) {
+            continueButton.tap()
+        }
         let attachment = XCTAttachment(screenshot: photos.screenshot())
         attachment.name = "Photos-start"; attachment.lifetime = .keepAlways; add(attachment)
         let hierarchy = XCTAttachment(string: photos.debugDescription)
