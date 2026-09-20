@@ -1,7 +1,7 @@
 {
   "name": "PhotoServer",
   "identifier": "com.example.PhotoServer.source",
-  "iconURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/icon.png",
+  "iconURL": "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
   "website": "https://github.com/fuckmmw-afk/ios-photo-server-extension",
   "subtitle": "Unsigned Photos editing client",
   "apps": [
@@ -9,22 +9,22 @@
       "name": "PhotoServer",
       "bundleIdentifier": "com.example.PhotoServer",
       "developerName": "fuckmmw",
-      "iconURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/icon.png",
-      "localizedDescription": "Unsigned iOS app with a Photo Editing Extension. Sign in Feather, then use Photos \u2192 Edit \u2192 \u22ef \u2192 PhotoServer. Processing starts automatically.",
+      "iconURL": "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
+      "localizedDescription": "Unsigned iOS app with a Photo Editing Extension. Sign in Feather, delete the old PhotoServer, install this build, then use Photos \u2192 Edit \u2192 \u22ef \u2192 PhotoServer.",
       "subtitle": "Photo Editing Extension for Gemini Web",
       "tintColor": "5B8DEF",
       "versions": [
         {
-          "version": "1.0.0",
-          "date": "2026-09-20T12:14:35Z",
-          "size": 104723,
+          "version": "1.0.1",
+          "date": "2026-09-20T14:55:00Z",
+          "size": 106810,
           "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
         }
       ],
       "appPermissions": {},
-      "version": "1.0.0",
-      "versionDate": "2026-09-20T12:14:35Z",
-      "size": 104723,
+      "version": "1.0.1",
+      "versionDate": "2026-09-20T14:55:00Z",
+      "size": 106810,
       "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
     }
   ]
