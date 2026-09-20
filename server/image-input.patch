@@ -1,112 +1,90 @@
 diff --git a/internal/commons/configs/configs.go b/internal/commons/configs/configs.go
-index 4a42677..b602d7c 100644
+index 4a42677..c123f1e 100644
 --- a/internal/commons/configs/configs.go
 +++ b/internal/commons/configs/configs.go
-@@ -47,6 +47,7 @@ type OpenAIConfig struct {
+@@ -47,7 +47,9 @@ type OpenAIConfig struct {
  }
  
  type ServerConfig struct {
-+	Host string
- 	Port string
+-	Port string
++	Host   string
++	Port   string
++	APIKey string
  }
  
-@@ -64,6 +65,7 @@ func New() (*Config, error) {
+ const (
+@@ -64,7 +66,9 @@ func New() (*Config, error) {
  	var cfg Config
  
  	// Server
 +	cfg.Server.Host = getEnv("HOST", "0.0.0.0")
  	cfg.Server.Port = getEnv("PORT", defaultServerPort)
++	cfg.Server.APIKey = strings.TrimSpace(os.Getenv("PHOTOSERVER_API_KEY"))
  
  	// General
+ 	cfg.LogLevel = getEnv("LOG_LEVEL", defaultLogLevel)
+@@ -124,6 +128,11 @@ func (c *Config) Validate() error {
+ 	if _, err := strconv.Atoi(c.Server.Port); err != nil {
+ 		return fmt.Errorf("invalid PORT value: %q (must be a number)", c.Server.Port)
+ 	}
++	if c.Server.APIKey == "" {
++		missingVars = append(missingVars, "PHOTOSERVER_API_KEY")
++	} else if len(c.Server.APIKey) < 24 {
++		return fmt.Errorf("PHOTOSERVER_API_KEY must be at least 24 characters")
++	}
+ 
+ 	if len(missingVars) > 0 {
+ 		return fmt.Errorf("missing required environment variables: %v. Please set them before running the application", missingVars)
+diff --git a/internal/commons/configs/configs_test.go b/internal/commons/configs/configs_test.go
+index bd2d7c7..d38ae63 100644
+--- a/internal/commons/configs/configs_test.go
++++ b/internal/commons/configs/configs_test.go
+@@ -41,6 +41,7 @@ func TestNewRequiresCompleteGeminiCookiesHeader(t *testing.T) {
+ func TestNewDerivesAuthenticationFromGeminiCookies(t *testing.T) {
+ 	t.Setenv("GEMINI_COOKIES", "NID=rollout; __Secure-1PSID=psid; __Secure-1PSIDTS=psidts")
+ 	t.Setenv("GEMINI_AUTH_USER", "2")
++	t.Setenv("PHOTOSERVER_API_KEY", "test-key-with-sufficient-entropy")
+ 	cfg, err := New()
+ 	if err != nil {
+ 		t.Fatal(err)
+@@ -49,3 +50,11 @@ func TestNewDerivesAuthenticationFromGeminiCookies(t *testing.T) {
+ 		t.Fatalf("incorrect Gemini config derived from full Cookie header: %#v", cfg.Gemini)
+ 	}
+ }
++
++func TestNewRequiresPhotoServerAPIKey(t *testing.T) {
++	t.Setenv("GEMINI_COOKIES", "__Secure-1PSID=psid; __Secure-1PSIDTS=psidts")
++	t.Setenv("PHOTOSERVER_API_KEY", "")
++	if _, err := New(); err == nil || !strings.Contains(err.Error(), "PHOTOSERVER_API_KEY") {
++		t.Fatalf("expected PHOTOSERVER_API_KEY requirement, got %v", err)
++	}
++}
 diff --git a/internal/modules/openai/dto/openai_dto.go b/internal/modules/openai/dto/openai_dto.go
-index fc546d3..6b6b82b 100644
+index fc546d3..bb6a3e4 100644
 --- a/internal/modules/openai/dto/openai_dto.go
 +++ b/internal/modules/openai/dto/openai_dto.go
-@@ -342,6 +342,7 @@ type ChunkChoice struct {
+@@ -342,11 +342,13 @@ type ChunkChoice struct {
  
  // ImageGenerationRequest represents an OpenAI-compatible image generation request.
  type ImageGenerationRequest struct {
-+	Image          string `json:"image,omitempty"`
- 	Model          string `json:"model,omitempty"`
- 	Prompt         string `json:"prompt"`
- 	N              int    `json:"n,omitempty"`
-diff --git a/internal/modules/openai/openai_controller.go b/internal/modules/openai/openai_controller.go
-index c930e99..5e78bd8 100644
---- a/internal/modules/openai/openai_controller.go
-+++ b/internal/modules/openai/openai_controller.go
-@@ -5,6 +5,7 @@ import (
- 	"context"
- 	"errors"
- 	"fmt"
-+	"strings"
- 	"time"
- 
- 	models "gemini-web-to-api/internal/commons/models"
-@@ -178,7 +179,7 @@ func (h *OpenAIController) HandleImageGenerations(c fiber.Ctx) error {
- 
- 	response, err := h.service.CreateImageGeneration(ctx, req)
- 	if err != nil {
--		if err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
-+		if strings.HasPrefix(err.Error(), "invalid image:") || err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
- 			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(err, "invalid_request_error"))
- 		}
- 		h.log.Error("CreateImageGeneration failed", zap.Error(err), zap.String("model", req.Model))
-diff --git a/internal/modules/openai/openai_service.go b/internal/modules/openai/openai_service.go
-index a052e4a..d9c8002 100644
---- a/internal/modules/openai/openai_service.go
-+++ b/internal/modules/openai/openai_service.go
-@@ -160,6 +160,10 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
- 	}
- 
- 	imagePrompt := buildImageGenerationPrompt(prompt, req.Size)
-+	inputFiles, err := imageInputFiles(req.Image)
-+	if err != nil {
-+		return nil, err
-+	}
- 	wantB64 := strings.EqualFold(req.ResponseFormat, "b64_json")
- 	opts := []providers.GenerateOption{}
- 	if req.Model != "" {
-@@ -168,6 +172,9 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
- 	if wantB64 {
- 		opts = append(opts, providers.WithGeneratedImageDownload(true))
- 	}
-+	if len(inputFiles) > 0 {
-+		opts = append(opts, providers.WithInputFiles(inputFiles))
-+	}
- 
- 	data := make([]dto.ImageGenerationData, 0, n)
- 	for len(data) < n {
-diff --git a/internal/server/server.go b/internal/server/server.go
-index 5ac1c0a..2659f31 100644
---- a/internal/server/server.go
-+++ b/internal/server/server.go
-@@ -18,7 +18,8 @@ import (
- // New creates a new Fiber app instance
- func NewGeminiWebToAPI(log *zap.Logger, cfg *configs.Config) *fiber.App {
- 	app := fiber.New(fiber.Config{
--		AppName: "Gemini Web To API",
-+		AppName:   "Gemini Web To API",
-+		BodyLimit: 36 * 1024 * 1024,
- 	})
- 
- 	app.Use(cors.New(cors.Config{
-@@ -69,7 +70,7 @@ func Register404Handler(app *fiber.App) {
- // RegisterFiberLifecycle registers the Fiber app lifecycle hooks
- func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config, log *zap.Logger) {
- 	port := cfg.Server.Port
--	address := fmt.Sprintf(":%s", port)
-+	address := fmt.Sprintf("%s:%s", cfg.Server.Host, port)
- 
- 	lc.Append(fx.Hook{
- 		OnStart: func(ctx context.Context) error {
-@@ -89,4 +90,3 @@ func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config
- 		},
- 	})
+-	Model          string `json:"model,omitempty"`
+-	Prompt         string `json:"prompt"`
+-	N              int    `json:"n,omitempty"`
+-	Size           string `json:"size,omitempty"`
+-	ResponseFormat string `json:"response_format,omitempty"`
++	Image            string `json:"image,omitempty"`
++	InputOrientation int    `json:"input_orientation,omitempty"`
++	Model            string `json:"model,omitempty"`
++	Prompt           string `json:"prompt"`
++	N                int    `json:"n,omitempty"`
++	Size             string `json:"size,omitempty"`
++	ResponseFormat   string `json:"response_format,omitempty"`
  }
--
+ 
+ // ImageGenerationResponse represents an OpenAI-compatible image generation response.
 diff --git a/internal/modules/openai/image_input.go b/internal/modules/openai/image_input.go
 new file mode 100644
-index 0000000..33573e4
+index 0000000..3194e29
 --- /dev/null
 +++ b/internal/modules/openai/image_input.go
 @@ -0,0 +1,49 @@
@@ -116,7 +94,6 @@ index 0000000..33573e4
 +	"bytes"
 +	"encoding/base64"
 +	"fmt"
-+	"gemini-web-to-api/internal/commons/models"
 +	"gemini-web-to-api/internal/modules/providers"
 +	"image"
 +	_ "image/jpeg"
@@ -153,18 +130,19 @@ index 0000000..33573e4
 +			return nil, fmt.Errorf("invalid image: missing HEIF container header")
 +		}
 +		brand := string(data[8:12])
-+		if !strings.Contains("heic heix hevc hevx mif1 msf1", brand) {
++		supportedBrands := map[string]struct{}{"heic": {}, "heix": {}, "hevc": {}, "hevx": {}, "heis": {}, "hevm": {}, "hevs": {}, "mif1": {}, "msf1": {}}
++		if _, ok := supportedBrands[brand]; !ok {
 +			return nil, fmt.Errorf("invalid image: unsupported HEIF brand")
 +		}
 +	}
-+	return providers.InputFilesFromAttachmentList([]models.Attachment{{Name: "source." + strings.TrimPrefix(mime, "image/"), MimeType: mime, Data: encoded}})
++	return []providers.InputFile{{Name: "source." + strings.TrimPrefix(mime, "image/"), MimeType: mime, Data: data}}, nil
 +}
 diff --git a/internal/modules/openai/image_input_test.go b/internal/modules/openai/image_input_test.go
 new file mode 100644
-index 0000000..c316749
+index 0000000..5763962
 --- /dev/null
 +++ b/internal/modules/openai/image_input_test.go
-@@ -0,0 +1,29 @@
+@@ -0,0 +1,37 @@
 +package openai
 +
 +import (
@@ -172,6 +150,7 @@ index 0000000..c316749
 +	"encoding/base64"
 +	"image"
 +	"image/png"
++	"strings"
 +	"testing"
 +)
 +
@@ -192,5 +171,205 @@ index 0000000..c316749
 +	}
 +	if files, err := imageInputFiles(""); err != nil || len(files) != 0 {
 +		t.Fatal("text-to-image compatibility broken")
++	}
++}
++
++func TestImageEditPromptUsesAttachmentAndOrientation(t *testing.T) {
++	prompt := buildImageGenerationPrompt("make it warmer", "", true, 6)
++	if !strings.Contains(prompt, "Edit the attached image") || !strings.Contains(prompt, "orientation 6") {
++		t.Fatalf("image edit prompt lost attachment context: %q", prompt)
++	}
++}
+diff --git a/internal/modules/openai/openai_controller.go b/internal/modules/openai/openai_controller.go
+index c930e99..5e78bd8 100644
+--- a/internal/modules/openai/openai_controller.go
++++ b/internal/modules/openai/openai_controller.go
+@@ -5,6 +5,7 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"strings"
+ 	"time"
+ 
+ 	models "gemini-web-to-api/internal/commons/models"
+@@ -178,7 +179,7 @@ func (h *OpenAIController) HandleImageGenerations(c fiber.Ctx) error {
+ 
+ 	response, err := h.service.CreateImageGeneration(ctx, req)
+ 	if err != nil {
+-		if err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
++		if strings.HasPrefix(err.Error(), "invalid image:") || err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
+ 			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(err, "invalid_request_error"))
+ 		}
+ 		h.log.Error("CreateImageGeneration failed", zap.Error(err), zap.String("model", req.Model))
+diff --git a/internal/modules/openai/openai_service.go b/internal/modules/openai/openai_service.go
+index a052e4a..57957eb 100644
+--- a/internal/modules/openai/openai_service.go
++++ b/internal/modules/openai/openai_service.go
+@@ -159,7 +159,11 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
+ 		return nil, fmt.Errorf("n must be between 1 and 10")
+ 	}
+ 
+-	imagePrompt := buildImageGenerationPrompt(prompt, req.Size)
++	inputFiles, err := imageInputFiles(req.Image)
++	if err != nil {
++		return nil, err
++	}
++	imagePrompt := buildImageGenerationPrompt(prompt, req.Size, len(inputFiles) > 0, req.InputOrientation)
+ 	wantB64 := strings.EqualFold(req.ResponseFormat, "b64_json")
+ 	opts := []providers.GenerateOption{}
+ 	if req.Model != "" {
+@@ -168,6 +172,9 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
+ 	if wantB64 {
+ 		opts = append(opts, providers.WithGeneratedImageDownload(true))
+ 	}
++	if len(inputFiles) > 0 {
++		opts = append(opts, providers.WithInputFiles(inputFiles))
++	}
+ 
+ 	data := make([]dto.ImageGenerationData, 0, n)
+ 	for len(data) < n {
+@@ -209,9 +216,16 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
+ 	}, nil
+ }
+ 
+-func buildImageGenerationPrompt(prompt, size string) string {
++func buildImageGenerationPrompt(prompt, size string, hasInput bool, orientation int) string {
+ 	var b strings.Builder
+-	b.WriteString("Generate an image from this prompt. Return the generated image, not only a text description.\n\nPrompt: ")
++	if hasInput {
++		b.WriteString("Edit the attached image. Preserve the subject, faces, composition, and its intended display orientation. Return only the edited image, not a text description.\n\nInstruction: ")
++		if orientation >= 1 && orientation <= 8 {
++			fmt.Fprintf(&b, "The attached file has EXIF display orientation %d; interpret it before editing.\n", orientation)
++		}
++	} else {
++		b.WriteString("Generate an image from this prompt. Return the generated image, not only a text description.\n\nPrompt: ")
++	}
+ 	b.WriteString(prompt)
+ 	if strings.TrimSpace(size) != "" {
+ 		b.WriteString("\nRequested size/aspect: ")
+diff --git a/internal/modules/providers/gemini_service.go b/internal/modules/providers/gemini_service.go
+index c2e2f53..90eb0d9 100644
+--- a/internal/modules/providers/gemini_service.go
++++ b/internal/modules/providers/gemini_service.go
+@@ -726,7 +726,7 @@ func (c *Client) responseModel(responseBody string) (geminiModel, bool) {
+ 	return *found, true
+ }
+ 
+-const maxGeneratedImageBytes = 50 << 20
++const maxGeneratedImageBytes = 12 << 20
+ 
+ func generatedImageHTTPClient(cookieHeader string) *http.Client {
+ 	return &http.Client{
+diff --git a/internal/server/server.go b/internal/server/server.go
+index 5ac1c0a..8eee31f 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -2,13 +2,14 @@ package server
+ 
+ import (
+ 	"context"
++	"crypto/subtle"
+ 	"fmt"
++	"strings"
+ 	"time"
+ 
+ 	"gemini-web-to-api/internal/commons/configs"
+ 
+ 	"github.com/gofiber/fiber/v3"
+-	"github.com/gofiber/fiber/v3/middleware/cors"
+ 	"github.com/gofiber/fiber/v3/middleware/limiter"
+ 	"github.com/gofiber/fiber/v3/middleware/recover"
+ 	"go.uber.org/fx"
+@@ -18,17 +19,12 @@ import (
+ // New creates a new Fiber app instance
+ func NewGeminiWebToAPI(log *zap.Logger, cfg *configs.Config) *fiber.App {
+ 	app := fiber.New(fiber.Config{
+-		AppName: "Gemini Web To API",
++		AppName:   "Gemini Web To API",
++		BodyLimit: 36 * 1024 * 1024,
+ 	})
+ 
+-	app.Use(cors.New(cors.Config{
+-		AllowOrigins:     []string{"*"},
+-		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With", "x-api-key", "anthropic-version"},
+-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+-		AllowCredentials: false,
+-	}))
+-
+ 	app.Use(recover.New())
++	app.Use(requireAPIKey(cfg.Server.APIKey))
+ 
+ 	if cfg.RateLimit.Enabled {
+ 		app.Use(limiter.New(limiter.Config{
+@@ -45,6 +41,18 @@ func NewGeminiWebToAPI(log *zap.Logger, cfg *configs.Config) *fiber.App {
+ 	return app
+ }
+ 
++func requireAPIKey(expected string) fiber.Handler {
++	return func(c fiber.Ctx) error {
++		provided := strings.TrimSpace(c.Get("X-PhotoServer-Key"))
++		if len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
++			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
++				"error": fiber.Map{"message": "missing or invalid PhotoServer API key", "type": "authentication_error"},
++			})
++		}
++		return c.Next()
++	}
++}
++
+ func HealthCheck(c fiber.Ctx) error {
+ 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+ 		"status":  "ok",
+@@ -69,7 +77,7 @@ func Register404Handler(app *fiber.App) {
+ // RegisterFiberLifecycle registers the Fiber app lifecycle hooks
+ func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config, log *zap.Logger) {
+ 	port := cfg.Server.Port
+-	address := fmt.Sprintf(":%s", port)
++	address := fmt.Sprintf("%s:%s", cfg.Server.Host, port)
+ 
+ 	lc.Append(fx.Hook{
+ 		OnStart: func(ctx context.Context) error {
+@@ -89,4 +97,3 @@ func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config
+ 		},
+ 	})
+ }
+-
+diff --git a/internal/server/server_auth_test.go b/internal/server/server_auth_test.go
+new file mode 100644
+index 0000000..c44678d
+--- /dev/null
++++ b/internal/server/server_auth_test.go
+@@ -0,0 +1,33 @@
++package server
++
++import (
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"gemini-web-to-api/internal/commons/configs"
++	"go.uber.org/zap"
++)
++
++func TestPhotoServerAPIKeyMiddleware(t *testing.T) {
++	app := NewGeminiWebToAPI(zap.NewNop(), &configs.Config{Server: configs.ServerConfig{APIKey: "test-key-with-sufficient-entropy"}})
++
++	unauthenticated := httptest.NewRequest(http.MethodGet, "/health", nil)
++	response, err := app.Test(unauthenticated)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if response.StatusCode != http.StatusUnauthorized {
++		t.Fatalf("unauthenticated status = %d, want %d", response.StatusCode, http.StatusUnauthorized)
++	}
++
++	authenticated := httptest.NewRequest(http.MethodGet, "/health", nil)
++	authenticated.Header.Set("X-PhotoServer-Key", "test-key-with-sufficient-entropy")
++	response, err = app.Test(authenticated)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if response.StatusCode != http.StatusOK {
++		t.Fatalf("authenticated status = %d, want %d", response.StatusCode, http.StatusOK)
 +	}
 +}

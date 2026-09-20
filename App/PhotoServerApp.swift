@@ -7,6 +7,7 @@ struct PhotoServerApp: App {
 
 struct ConnectionView: View {
     @State private var address = Settings.address
+    @State private var apiKey = Settings.apiKey
     @State private var message = ""
     @State private var checking = false
     var body: some View {
@@ -14,28 +15,31 @@ struct ConnectionView: View {
             Form {
                 Section("From Apple Photos") {
                     Text("Open a photo → Edit → ⋯ → PhotoServer. Processing begins automatically. Review the result and tap Done, then finish editing in Photos.")
-                    Text("The original stays available through Revert to Original. Photos are sent to your Gemini Web server.")
+                    Text("The original stays available through Revert to Original. Photos are sent to the server you configure below.")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Server connection") {
-                    TextField("https://photo.fuckmmw.space", text: $address)
+                    TextField("https://photo.example.com", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    SecureField("PhotoServer API key", text: $apiKey)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.asciiCapable)
                     Button("Save and check connection") {
                         checking = true
                         Task {
                             defer { checking = false }
                             do {
-                                try Settings.save(address)
-                                message = try await GeminiClient(baseURL: Settings.validatedURL(address)).checkConnection()
+                                let configuration = try Settings.configuration(address: address, apiKey: apiKey)
+                                message = try await GeminiClient(configuration: configuration).checkConnection()
+                                try Settings.save(configuration)
                             } catch { message = error.localizedDescription }
                         }
-                    }.disabled(checking)
+                    }.disabled(checking || !Settings.appGroupAvailable)
                     if checking { ProgressView() }
                     if !message.isEmpty { Text(message).font(.footnote) }
-                    Text("The phone talks to \(Settings.defaultAddress) over HTTPS. That hostname reaches the Gemini proxy on the server. localhost on the phone is the phone, not the VPS.")
+                    Text("Use HTTPS for a remote server. HTTP is allowed only for localhost or an SSH tunnel. The API key is shared only by this app and its Photos extension through the App Group.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if !Settings.appGroupAvailable {
-                        Text("Feather installs usually have no App Group, so the Photos extension uses \(Settings.defaultAddress) even if you change this field.")
+                        Text("This build has no usable App Group. Re-sign it with a profile that authorizes \(Settings.groupID); otherwise the extension cannot safely receive its server credentials.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }

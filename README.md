@@ -22,25 +22,25 @@ CI сохраняет попытку открыть extension в системн�
 
 ## Архитектура и протокол
 
-Photos → PHContentEditingInput → исходный файл → URLSession → существующий Gemini Web proxy → PNG/JPEG → preview → PHContentEditingOutput → тот же asset.
+Photos → PHContentEditingInput → исходный файл + EXIF orientation → authenticated URLSession → Gemini Web proxy → bounded PNG/JPEG response → prepared JPEG preview → PHContentEditingOutput → тот же asset.
 
-Используется прежний `POST /openai/v1/images/generations`: к существующим `model`, `prompt`, `n: 1`, `response_format: b64_json` добавлено необязательное поле `image: data:<mime>;base64,...`. Ответ — прежний `data[0].b64_json`. Нового backend, очереди и polling нет. Загрузка в Gemini и авторизованное скачивание результата переиспользуют существующий provider. Cookies не передаются iPhone.
+Используется прежний `POST /openai/v1/images/generations`: к существующим `model`, `prompt`, `n: 1`, `response_format: b64_json` добавлены `image: data:<mime>;base64,...` и `input_orientation`. Каждый запрос, включая `/models`, несёт `X-PhotoServer-Key`. Ответ — `data[0].b64_json`, ограниченный 12 MiB decoded image / 18 MiB JSON response. Cookies Gemini не передаются iPhone.
 
 Модель — `gemini-3.6-flash`, фактически доступная в этой Web-сессии. Название внутреннего image-generator не подтверждено; это не обещание вызова API-модели `gemini-3.1-flash-image`. Временный промпт находится в `Shared/Settings.swift` и сохраняет содержимое, лица и композицию; продуктовый промпт будет добавлен позже. Генеративная модель не гарантирует побитовое сохранение деталей.
 
 ## Подключение
 
-Proxy слушает только `127.0.0.1:4981` на сервере. Для iPhone он доступен по HTTPS: `https://photo.fuckmmw.space` (Cloudflare Tunnel → локальный nginx-шлюз → тот же процесс). Cookies Gemini на телефон не уходят. `localhost` на телефоне — это сам телефон, не VPS.
+Proxy слушает только `127.0.0.1:4981` на сервере. Для iPhone он должен быть доступен по HTTPS через gateway, который не снимает `X-PhotoServer-Key`. До публикации endpoint нужно применить `server/image-input.patch`, задать уникальный `PHOTOSERVER_API_KEY` и проверить 401 без ключа. Cookies Gemini на телефон не уходят. `localhost` на телефоне — это сам телефон, не VPS.
 
-В приложении по умолчанию `https://photo.fuckmmw.space`. Разрешён HTTPS или HTTP на loopback. Общего ATS bypass нет. Единственная настройка — URL подключения. Sideload через Feather обычно без App Group, поэтому расширение берёт URL по умолчанию из бинарника.
+В бинарнике нет адреса или ключа по умолчанию. Пользователь вводит HTTPS URL и API key один раз в приложении; они хранятся в App Group и доступны extension. HTTP разрешён только для loopback/SSH tunnel. Общего ATS bypass нет.
 
 ## Качество и ограничения
 
 - Используется `fullSizeImageURL`, не placeholder. Возврат `false` из `canHandleAdjustmentData` запрашивает текущую сведённую версию с уже применёнными правками.
-- Входные JPEG/HEIC/HEIF/PNG отправляются исходными байтами; base64 пишется блоками в файл. Preview декодируется до 1400 px, но не используется для upload.
+- Входные JPEG/HEIC/HEIF/PNG отправляются исходными байтами; base64 пишется блоками в защищённый файл. Ориентация `fullSizeImageOrientation` передаётся серверу как явная инструкция. Preview декодируется до 1400 px, но не используется для upload.
 - При сохранении JPEG с upright-пикселями копируется; PNG или повёрнутый JPEG один раз преобразуется в JPEG качества 1.0 согласно контракту базового `renderedContentURL`. Поворот физически применяется к пикселям, orientation становится 1. Размер не уменьшается, при повороте на 90° ширина и высота меняются местами. Цветовой профиль берётся из результата; старые EXIF и геометрия оригинала не переносятся поверх нового изображения.
 - Нейросеть может изменить размер, ICC/Display P3, HDR, EXIF и детализацию. Клиент не обещает восстановить утраченное. PNG alpha при JPEG-экспорте не сохраняется.
-- Вход ограничен 25 MiB, тело JSON — 36 MiB; результат при рендеринге — 48 MP. При превышении ошибка, а не скрытое уменьшение. Это лимиты приложения, не универсальные лимиты Apple.
+- Вход ограничен 25 MiB, тело JSON — 36 MiB; decoded результат — 12 MiB, JSON response — 18 MiB, финальное JPEG-рендерирование — 12 MP. Результат полностью готовится до статуса Ready. При превышении ошибка, а не скрытое уменьшение.
 - Видео, Live Photos и RAW не поддерживаются в первой версии. iCloud-файл должен быть предоставлен Photos полностью.
 - Extension выполняет сетевой запрос в foreground с timeout 360 секунд. Apple может завершить процесс раньше при нехватке ресурсов; фиксированного гарантированного memory/time бюджета нет. Фонового завершения и сохранения после закрытия extension не обещаем.
 - Cancel отменяет URLSession и сохранение. Уже начавшаяся работа Google может завершиться на сервере. Автоматических повторных генераций со стороны клиента нет.
@@ -48,20 +48,20 @@ Proxy слушает только `127.0.0.1:4981` на сервере. Для i
 
 ## Идентификаторы
 
-Единый файл `Config/Identifiers.xcconfig`: `com.example.PhotoServer`, дочерний `com.example.PhotoServer.PhotoEditingExtension`, App Group `group.com.example.PhotoServer`. Entitlements app и extension содержат одинаковую группу. Cookie/API keys в app, plist и entitlements отсутствуют. Для доступа к текущему asset расширению не нужен общий Photo Library permission.
+Единый файл `Config/Identifiers.xcconfig`: `com.example.PhotoServer`, дочерний `com.example.PhotoServer.PhotoEditingExtension`, App Group `group.com.example.PhotoServer`. Entitlements app и extension содержат одинаковую группу. Cookie/API keys в app, plist и entitlements отсутствуют; server URL и API key вводятся после установки и хранятся только в App Group. Для доступа к текущему asset расширению не нужен общий Photo Library permission.
 
-Sideload через Feather обычно **не даёт App Groups**. Приложение и Photos-расширение тогда используют URL по умолчанию `http://localhost:4981`. Этого достаточно, если на iPhone поднят SSH-туннель на этот порт. Поле адреса в приложении проверяет связь из самого приложения; без App Group расширение его не увидит.
-
-При внешнем подписании профилем с App Groups идентификаторы app/extension и группа должны совпадать. Инструкции по сертификатам не входят в проект.
+Sideload через Feather без App Groups **не поддерживается**: он не может безопасно передать URL и API key в Photos extension. Подписывайте оба target профилем, который authorizes `group.com.example.PhotoServer`; идентификаторы app/extension и группа должны совпадать.
 
 ## Сборка и тестирование
 
-На Mac с Xcode и XcodeGen: `xcodegen generate`, затем `bash scripts/build-unsigned.sh`. Проект/схемы генерируются из `project.yml`; сформированный `.xcodeproj` также публикуется в verification artifact. `bash scripts/test-simulator.sh` запускает unit-тесты и отдельную попытку проверки Photos UI. URLProtocol fixtures не требуют Gemini и не расходуют квоту.
+На Mac с Xcode и XcodeGen: `xcodegen generate`, затем `bash scripts/build-unsigned.sh`. Для установки создайте корректную signed build с App Group entitlement. `bash scripts/test-simulator.sh` запускает unit-тесты и требует успешного Photos UI test; skipped или failed test останавливает CI. URLProtocol fixtures не требуют Gemini и не расходуют квоту.
 
 CI `.github/workflows/build-ios.yml` использует GitHub-hosted macOS, выбирает установленный стабильный Xcode, записывает SDKs, проверяет targets и собирает app и extension без подписания. `CODE_SIGNING_ALLOWED=NO`, `CODE_SIGNING_REQUIRED=NO`, `CODE_SIGN_IDENTITY=""`. Archive/exportArchive не используются.
 
 `PhotoServer-unsigned.ipa` содержит `Payload/PhotoServer.app/PlugIns/PhotoEditingExtension.appex/`. Проверки: `unzip -l PhotoServer-unsigned.ipa`, `python3 scripts/verify-ipa.py PhotoServer-unsigned.ipa`; CI дополнительно проверяет отсутствие подписи через `codesign -d`.
 
-Скачать: GitHub → Actions → успешный Build unsigned iOS IPA → Artifact `PhotoServer-unsigned`. При push тега `v*` workflow прикрепляет IPA к GitHub Release. IPA намеренно unsigned: его нельзя непосредственно установить на физический iPhone без внешнего подписания. Нет ad-hoc signing, `.p12`, signing secrets или embedded.mobileprovision.
+При push тега `v*` workflow прикрепляет IPA к GitHub Release. IPA намеренно unsigned: его нельзя непосредственно установить на физический iPhone без внешнего подписания, которое добавляет App Group entitlement. Нет ad-hoc signing, `.p12`, signing secrets или embedded.mobileprovision. Feather feed прекращён, чтобы не распространять неподдерживаемую сборку без App Group.
 
 Серверные изменения воспроизводятся по `server/README.md`. Ни пользовательские фото, ни cookies, ни артефакты сборки не коммитятся.
+
+Политика обработки данных и обязанности оператора сервера: [`docs/privacy.md`](docs/privacy.md).

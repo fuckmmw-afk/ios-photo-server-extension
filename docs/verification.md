@@ -2,12 +2,12 @@
 
 ## CI
 
-- 2026-09-20 `2efab9e` — first unsigned IPA: https://github.com/fuckmmw-afk/ios-photo-server-extension/actions/runs/35509348066 (success; artifact `PhotoServer-unsigned`).
-- Follow-up commit on `main` rebuilds IPA with EXIF bake-in, unit coverage, and diagnostic Photos screenshots. Link is filled after that run completes.
+- 2026-09-20 `988552a` — successful build, IPA layout and five unit tests passed: https://github.com/fuckmmw-afk/ios-photo-server-extension/actions/runs/35533649825.
+- Its Photos UI test was skipped before the CI gate was tightened; it is not evidence that the extension can be opened or saved from Photos.
 
 ## Server — 2026-09-20
 
-- Existing Gemini Web service was patched and rebuilt in place. Same port 4981 and same generations endpoint.
+- Existing Gemini Web service was patched and rebuilt in place. That deployment must be patched again with the current `PHOTOSERVER_API_KEY` authentication change before it is exposed to an iPhone.
 - Go tests for OpenAI service/DTO and configuration pass.
 - Live image-to-image test passed: the previous 33,429-byte test image containing a blue circle was uploaded, Gemini returned a 34,531-byte JPEG with the same composition and a green circle as requested. Output visually inspected. No new text-only image was substituted for input processing.
 - Invalid image/base64 returns HTTP 400 before contacting Gemini.

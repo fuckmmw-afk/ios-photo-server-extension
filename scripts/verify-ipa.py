@@ -10,6 +10,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     assert not any(n.endswith('embedded.mobileprovision') or '/_CodeSignature/' in n for n in names)
     app_info = plistlib.loads(archive.read(app + 'Info.plist'))
     ext_info = plistlib.loads(archive.read(ext + 'Info.plist'))
+    assert app + 'PrivacyInfo.xcprivacy' in names
+    assert ext + 'PrivacyInfo.xcprivacy' in names
     assert ext_info['CFBundleIdentifier'].startswith(app_info['CFBundleIdentifier'] + '.')
     assert ext_info['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.photo-editing'
     principal = ext_info['NSExtension']['NSExtensionPrincipalClass']
@@ -17,4 +19,5 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     for path, info in [(app, app_info), (ext, ext_info)]:
         assert path + info['CFBundleExecutable'] in names
         assert info['MinimumOSVersion'] == '18.0'
+    assert 'UIInterfaceOrientationPortraitUpsideDown' in app_info['UISupportedInterfaceOrientations']
     print('Verified IPA layout, identifiers, extension point and absence of signing resources.')

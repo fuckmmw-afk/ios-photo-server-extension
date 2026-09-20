@@ -6,9 +6,12 @@ import CoreImage
 
 enum ImageFiles {
     static let maxInputBytes = 25 * 1024 * 1024
+    // PNG conversion and EXIF bake-in decode pixels. Keep that allocation suitable for an extension.
+    static let maxRenderedPixels: Int64 = 12_000_000
     static func source(_ url: URL) throws -> CGImageSource {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
-              CGImageSourceGetCount(source) > 0 else { throw PhotoError.message("The image cannot be decoded.") }
+              CGImageSourceGetCount(source) > 0,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else { throw PhotoError.message("The image cannot be decoded completely.") }
         return source
     }
     static func mime(_ url: URL) throws -> String {
@@ -33,8 +36,8 @@ enum ImageFiles {
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
         let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.int64Value ?? 0
         let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.int64Value ?? 0
-        guard width > 0, height > 0, width * height <= 48_000_000 else {
-            throw PhotoError.message("The returned image exceeds the 48 MP rendering budget. It has not been resized or saved.")
+        guard width > 0, height > 0, width * height <= maxRenderedPixels else {
+            throw PhotoError.message("The returned image exceeds the 12 MP extension rendering budget. It has not been resized or saved.")
         }
         let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.int32Value ?? 1
         if mime == "image/jpeg" && orientation == 1 {

@@ -2,8 +2,7 @@ import UIKit
 import Photos
 import PhotosUI
 
-// ObjC name must stay stable after Feather resigns the IPA. Do not put @MainActor on the class:
-// Photos instantiates NSExtensionPrincipalClass from Objective-C.
+// ObjC name must stay stable because Photos instantiates NSExtensionPrincipalClass by name.
 @objc(PhotoEditingViewController)
 final class PhotoEditingViewController: UIViewController, PHContentEditingController {
     private var input: PHContentEditingInput?
@@ -83,6 +82,8 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private func beginProcessing() {
         task?.cancel()
         cleanup()
+        removeOrphanedWorkDirectories()
+        task = nil
         let attempt = UUID()
         generation = attempt
         result = nil
@@ -92,25 +93,36 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
             fail("Only full-size still photographs are supported. Download the photo from iCloud in Photos and try again.")
             return
         }
+        let configuration: ServerConfiguration
+        do {
+            configuration = try Settings.savedConfiguration()
+        } catch {
+            fail(error.localizedDescription)
+            return
+        }
         let work = FileManager.default.temporaryDirectory.appendingPathComponent("PhotoServer-\(attempt.uuidString)", isDirectory: true)
+        let prepared = work.appendingPathComponent("rendered.jpg")
         directory = work
         task = Task { [weak self] in
             guard let self else { return }
             do {
-                try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
-                let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, directory: work) }
+                try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+                let orientation = input.fullSizeImageOrientation
+                let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, orientation: orientation, directory: work) }
                 let request = try await withTaskCancellationHandler(operation: { try await preparation.value }, onCancel: { preparation.cancel() })
                 try Task.checkCancellation()
                 setStatus("Uploading and processing…")
-                let client = GeminiClient(baseURL: try Settings.validatedURL(Settings.address))
+                let client = GeminiClient(configuration: configuration)
                 let file = try await client.process(requestFile: request, directory: work)
                 try Task.checkCancellation()
                 guard generation == attempt else { return }
                 setStatus("Preparing result…")
-                let image = try await Task.detached { try ImageFiles.preview(file) }.value
+                try await Task.detached { try ImageFiles.prepareJPEG(from: file, to: prepared) }.value
+                try Task.checkCancellation()
+                let image = try await Task.detached { try ImageFiles.preview(prepared) }.value
                 try Task.checkCancellation()
                 guard generation == attempt else { return }
-                result = file
+                result = prepared
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.generation == attempt else { return }
                     self.preview.image = image
@@ -119,10 +131,11 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
                     self.status.text = "Ready. Tap Done to apply."
                 }
                 try? FileManager.default.removeItem(at: request)
+                try? FileManager.default.removeItem(at: file)
             } catch {
                 if generation == attempt && !Task.isCancelled { fail(error.localizedDescription) }
             }
-            if result != work.appendingPathComponent("result.image") {
+            if result != prepared {
                 try? FileManager.default.removeItem(at: work)
             }
         }
@@ -158,7 +171,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
             do {
                 let output = PHContentEditingOutput(contentEditingInput: input)
                 let destination = output.renderedContentURL
-                try await Task.detached { try ImageFiles.prepareJPEG(from: result, to: destination) }.value
+                try await Task.detached { try FileManager.default.copyItem(at: result, to: destination) }.value
                 guard generation == attempt else { completionHandler(nil); return }
                 let metadata = try JSONSerialization.data(withJSONObject: ["version": 1, "model": Settings.model, "operation": "gemini-web"])
                 output.adjustmentData = PHAdjustmentData(formatIdentifier: "com.example.PhotoServer.adjustment", formatVersion: "1.0", data: metadata)
@@ -182,5 +195,13 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private func cleanup() {
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
+    }
+
+    private func removeOrphanedWorkDirectories() {
+        let temporary = FileManager.default.temporaryDirectory
+        guard let entries = try? FileManager.default.contentsOfDirectory(at: temporary, includingPropertiesForKeys: nil) else { return }
+        for entry in entries where entry.lastPathComponent.hasPrefix("PhotoServer-") {
+            try? FileManager.default.removeItem(at: entry)
+        }
     }
 }
