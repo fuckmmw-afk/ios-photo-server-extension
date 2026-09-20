@@ -2,8 +2,6 @@ import UIKit
 import Photos
 import PhotosUI
 
-// ObjC name must stay stable because Photos instantiates NSExtensionPrincipalClass by name.
-@objc(PhotoEditingViewController)
 final class PhotoEditingViewController: UIViewController, PHContentEditingController {
     private var input: PHContentEditingInput?
     private var task: Task<Void, Never>?

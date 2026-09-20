@@ -13,7 +13,7 @@
 <key>PhotoServerAppGroup</key><string>$(APP_GROUP_ID)</string>
 <key>NSExtension</key><dict>
   <key>NSExtensionPointIdentifier</key><string>com.apple.photo-editing</string>
-  <key>NSExtensionPrincipalClass</key><string>PhotoEditingViewController</string>
+  <key>NSExtensionPrincipalClass</key><string>$(PRODUCT_MODULE_NAME).PhotoEditingViewController</string>
   <key>NSExtensionAttributes</key><dict><key>PHSupportedMediaTypes</key><array><string>Image</string></array></dict>
 </dict>
 <key>NSAppTransportSecurity</key><dict><key>NSAllowsLocalNetworking</key><true/><key>NSExceptionDomains</key><dict><key>localhost</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/></dict></dict></dict>
