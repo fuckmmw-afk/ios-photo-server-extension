@@ -1,0 +1,83 @@
+name: PhotoServer
+options:
+  minimumXcodeGenVersion: 2.42.0
+  deploymentTarget:
+    iOS: '18.0'
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Identifiers.xcconfig
+  Release: Config/Identifiers.xcconfig
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    GENERATE_INFOPLIST_FILE: NO
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ''
+targets:
+  PhotoServer:
+    type: application
+    platform: iOS
+    sources:
+      - App
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX)
+        INFOPLIST_FILE: Config/App-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/Shared.entitlements
+    dependencies:
+      - target: PhotoEditingExtension
+        embed: true
+        codeSign: false
+  PhotoEditingExtension:
+    type: app-extension
+    platform: iOS
+    sources:
+      - PhotoEditingExtension
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).PhotoEditingExtension
+        INFOPLIST_FILE: Config/Extension-Info.plist
+        CODE_SIGN_ENTITLEMENTS: Config/Shared.entitlements
+        APPLICATION_EXTENSION_API_ONLY: YES
+        SKIP_INSTALL: YES
+  PhotoServerTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: Tests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).Tests
+    dependencies:
+      - target: PhotoServer
+  PhotosIntegrationTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: UITests
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).UITests
+        TEST_TARGET_NAME: PhotoServer
+    dependencies:
+      - target: PhotoServer
+schemes:
+  PhotoServer:
+    build:
+      targets:
+        PhotoServer: all
+    test:
+      targets:
+        - PhotoServerTests
+  PhotosIntegration:
+    build:
+      targets:
+        PhotoServer: all
+    test:
+      targets:
+        - PhotosIntegrationTests

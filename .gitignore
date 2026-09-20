@@ -1,0 +1,16 @@
+.DS_Store
+DerivedData/
+build/
+artifacts/
+*.ipa
+*.xcresult
+*.xcuserstate
+xcuserdata/
+.env
+*.p12
+*.mobileprovision
+*.pem
+*.key
+.cookies/
+.swiftpm/
+server/upstream/

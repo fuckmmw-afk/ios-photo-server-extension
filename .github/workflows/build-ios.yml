@@ -1,0 +1,66 @@
+name: Build unsigned iOS IPA
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select installed stable Xcode and record SDKs
+        run: |
+          mkdir -p build
+          bash scripts/select-xcode.sh | tee build/sdk-report.txt
+      - name: Generate Xcode project
+        run: |
+          brew list xcodegen >/dev/null 2>&1 || brew install xcodegen
+          xcodegen generate
+          xcodebuild -list -project PhotoServer.xcodeproj | tee build/targets.txt
+      - name: Build and validate unsigned IPA
+        run: bash scripts/build-unsigned.sh
+      - name: Unit tests and Photos entry-point probe
+        run: bash scripts/test-simulator.sh
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoServer-unsigned
+          path: build/PhotoServer-unsigned.ipa
+          if-no-files-found: error
+      - name: Upload project and verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification
+          path: |
+            PhotoServer.xcodeproj
+            build/*.log
+            build/*.txt
+            build/*.xcresult
+          retention-days: 14
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PhotoServer-unsigned
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "PhotoServer $TAG" --notes "Unsigned iOS app with embedded Photo Editing Extension. See README for verified compatibility and device-test requirements."
+          gh release upload "$TAG" PhotoServer-unsigned.ipa --clobber

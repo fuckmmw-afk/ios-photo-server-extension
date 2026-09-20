@@ -1,0 +1,196 @@
+diff --git a/internal/commons/configs/configs.go b/internal/commons/configs/configs.go
+index 4a42677..b602d7c 100644
+--- a/internal/commons/configs/configs.go
++++ b/internal/commons/configs/configs.go
+@@ -47,6 +47,7 @@ type OpenAIConfig struct {
+ }
+ 
+ type ServerConfig struct {
++	Host string
+ 	Port string
+ }
+ 
+@@ -64,6 +65,7 @@ func New() (*Config, error) {
+ 	var cfg Config
+ 
+ 	// Server
++	cfg.Server.Host = getEnv("HOST", "0.0.0.0")
+ 	cfg.Server.Port = getEnv("PORT", defaultServerPort)
+ 
+ 	// General
+diff --git a/internal/modules/openai/dto/openai_dto.go b/internal/modules/openai/dto/openai_dto.go
+index fc546d3..6b6b82b 100644
+--- a/internal/modules/openai/dto/openai_dto.go
++++ b/internal/modules/openai/dto/openai_dto.go
+@@ -342,6 +342,7 @@ type ChunkChoice struct {
+ 
+ // ImageGenerationRequest represents an OpenAI-compatible image generation request.
+ type ImageGenerationRequest struct {
++	Image          string `json:"image,omitempty"`
+ 	Model          string `json:"model,omitempty"`
+ 	Prompt         string `json:"prompt"`
+ 	N              int    `json:"n,omitempty"`
+diff --git a/internal/modules/openai/openai_controller.go b/internal/modules/openai/openai_controller.go
+index c930e99..5e78bd8 100644
+--- a/internal/modules/openai/openai_controller.go
++++ b/internal/modules/openai/openai_controller.go
+@@ -5,6 +5,7 @@ import (
+ 	"context"
+ 	"errors"
+ 	"fmt"
++	"strings"
+ 	"time"
+ 
+ 	models "gemini-web-to-api/internal/commons/models"
+@@ -178,7 +179,7 @@ func (h *OpenAIController) HandleImageGenerations(c fiber.Ctx) error {
+ 
+ 	response, err := h.service.CreateImageGeneration(ctx, req)
+ 	if err != nil {
+-		if err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
++		if strings.HasPrefix(err.Error(), "invalid image:") || err.Error() == "prompt is required" || err.Error() == "n must be between 1 and 10" {
+ 			return c.Status(fiber.StatusBadRequest).JSON(utils.ErrorToResponse(err, "invalid_request_error"))
+ 		}
+ 		h.log.Error("CreateImageGeneration failed", zap.Error(err), zap.String("model", req.Model))
+diff --git a/internal/modules/openai/openai_service.go b/internal/modules/openai/openai_service.go
+index a052e4a..d9c8002 100644
+--- a/internal/modules/openai/openai_service.go
++++ b/internal/modules/openai/openai_service.go
+@@ -160,6 +160,10 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
+ 	}
+ 
+ 	imagePrompt := buildImageGenerationPrompt(prompt, req.Size)
++	inputFiles, err := imageInputFiles(req.Image)
++	if err != nil {
++		return nil, err
++	}
+ 	wantB64 := strings.EqualFold(req.ResponseFormat, "b64_json")
+ 	opts := []providers.GenerateOption{}
+ 	if req.Model != "" {
+@@ -168,6 +172,9 @@ func (s *OpenAIService) CreateImageGeneration(ctx context.Context, req dto.Image
+ 	if wantB64 {
+ 		opts = append(opts, providers.WithGeneratedImageDownload(true))
+ 	}
++	if len(inputFiles) > 0 {
++		opts = append(opts, providers.WithInputFiles(inputFiles))
++	}
+ 
+ 	data := make([]dto.ImageGenerationData, 0, n)
+ 	for len(data) < n {
+diff --git a/internal/server/server.go b/internal/server/server.go
+index 5ac1c0a..2659f31 100644
+--- a/internal/server/server.go
++++ b/internal/server/server.go
+@@ -18,7 +18,8 @@ import (
+ // New creates a new Fiber app instance
+ func NewGeminiWebToAPI(log *zap.Logger, cfg *configs.Config) *fiber.App {
+ 	app := fiber.New(fiber.Config{
+-		AppName: "Gemini Web To API",
++		AppName:   "Gemini Web To API",
++		BodyLimit: 36 * 1024 * 1024,
+ 	})
+ 
+ 	app.Use(cors.New(cors.Config{
+@@ -69,7 +70,7 @@ func Register404Handler(app *fiber.App) {
+ // RegisterFiberLifecycle registers the Fiber app lifecycle hooks
+ func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config, log *zap.Logger) {
+ 	port := cfg.Server.Port
+-	address := fmt.Sprintf(":%s", port)
++	address := fmt.Sprintf("%s:%s", cfg.Server.Host, port)
+ 
+ 	lc.Append(fx.Hook{
+ 		OnStart: func(ctx context.Context) error {
+@@ -89,4 +90,3 @@ func RegisterFiberLifecycle(lc fx.Lifecycle, app *fiber.App, cfg *configs.Config
+ 		},
+ 	})
+ }
+-
+diff --git a/internal/modules/openai/image_input.go b/internal/modules/openai/image_input.go
+new file mode 100644
+index 0000000..33573e4
+--- /dev/null
++++ b/internal/modules/openai/image_input.go
+@@ -0,0 +1,49 @@
++package openai
++
++import (
++	"bytes"
++	"encoding/base64"
++	"fmt"
++	"gemini-web-to-api/internal/commons/models"
++	"gemini-web-to-api/internal/modules/providers"
++	"image"
++	_ "image/jpeg"
++	_ "image/png"
++	"strings"
++)
++
++const maxImageBytes = 25 * 1024 * 1024
++
++func imageInputFiles(value string) ([]providers.InputFile, error) {
++	if value == "" {
++		return nil, nil
++	}
++	header, encoded, ok := strings.Cut(value, ",")
++	types := map[string]string{"data:image/jpeg;base64": "image/jpeg", "data:image/png;base64": "image/png", "data:image/heic;base64": "image/heic", "data:image/heif;base64": "image/heif"}
++	mime, supported := types[header]
++	if !ok || !supported {
++		return nil, fmt.Errorf("invalid image: expected JPEG, PNG, HEIC or HEIF base64 data URL")
++	}
++	if len(encoded) > base64.StdEncoding.EncodedLen(maxImageBytes) {
++		return nil, fmt.Errorf("invalid image: exceeds 25 MiB")
++	}
++	data, err := base64.StdEncoding.DecodeString(encoded)
++	if err != nil || len(data) == 0 || len(data) > maxImageBytes {
++		return nil, fmt.Errorf("invalid image: corrupt base64 or size exceeds 25 MiB")
++	}
++	if mime == "image/jpeg" || mime == "image/png" {
++		config, format, err := image.DecodeConfig(bytes.NewReader(data))
++		if err != nil || "image/"+format != mime || config.Width <= 0 || config.Height <= 0 {
++			return nil, fmt.Errorf("invalid image: MIME does not match image content")
++		}
++	} else {
++		if len(data) < 16 || string(data[4:8]) != "ftyp" {
++			return nil, fmt.Errorf("invalid image: missing HEIF container header")
++		}
++		brand := string(data[8:12])
++		if !strings.Contains("heic heix hevc hevx mif1 msf1", brand) {
++			return nil, fmt.Errorf("invalid image: unsupported HEIF brand")
++		}
++	}
++	return providers.InputFilesFromAttachmentList([]models.Attachment{{Name: "source." + strings.TrimPrefix(mime, "image/"), MimeType: mime, Data: encoded}})
++}
+diff --git a/internal/modules/openai/image_input_test.go b/internal/modules/openai/image_input_test.go
+new file mode 100644
+index 0000000..c316749
+--- /dev/null
++++ b/internal/modules/openai/image_input_test.go
+@@ -0,0 +1,29 @@
++package openai
++
++import (
++	"bytes"
++	"encoding/base64"
++	"image"
++	"image/png"
++	"testing"
++)
++
++func TestImageInputFiles(t *testing.T) {
++	var b bytes.Buffer
++	if err := png.Encode(&b, image.NewRGBA(image.Rect(0, 0, 3, 2))); err != nil {
++		t.Fatal(err)
++	}
++	encoded := base64.StdEncoding.EncodeToString(b.Bytes())
++	files, err := imageInputFiles("data:image/png;base64," + encoded)
++	if err != nil || len(files) != 1 {
++		t.Fatalf("valid image: %v", err)
++	}
++	for _, value := range []string{"https://example.org/image.png", "data:image/png;base64,garbage", "data:image/jpeg;base64," + encoded, "data:image/heic;base64," + encoded} {
++		if _, err := imageInputFiles(value); err == nil {
++			t.Fatalf("accepted invalid input %q", value[:20])
++		}
++	}
++	if files, err := imageInputFiles(""); err != nil || len(files) != 0 {
++		t.Fatal("text-to-image compatibility broken")
++	}
++}
