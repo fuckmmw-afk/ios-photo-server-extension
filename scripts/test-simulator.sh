@@ -12,6 +12,12 @@ if not candidates: raise SystemExit("No available iPhone simulator")
 print(max(candidates, key=lambda item: (item[0], item[1]["name"]))[1]["udid"])')
 xcrun simctl boot "$device" || true
 xcrun simctl bootstatus "$device" -b
+collect_extension_log() {
+  xcrun simctl spawn "$device" log show --last 30m --style compact \
+    --predicate 'process == "PhotoEditingExtension" OR eventMessage CONTAINS "PhotoEditingExtension"' \
+    > build/photo-editing-extension.log 2>&1 || true
+}
+trap collect_extension_log EXIT
 xcodebuild -project PhotoServer.xcodeproj -scheme PhotoServer -configuration Debug \
   -destination "platform=iOS Simulator,id=$device" -parallel-testing-enabled NO -derivedDataPath build/Simulator \
   -resultBundlePath build/UnitTests.xcresult CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY='' \
