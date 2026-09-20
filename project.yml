@@ -35,6 +35,12 @@ targets:
     sources:
       - PhotoEditingExtension
       - Shared
+    # PHEditingExtensionContext is created dynamically by the Photos host, so
+    # importing PHContentEditingController alone does not guarantee the linker
+    # retains PhotosUI.framework in the extension binary.
+    dependencies:
+      - sdk: Photos.framework
+      - sdk: PhotosUI.framework
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX).PhotoEditingExtension
