@@ -54,6 +54,7 @@ final class PhotoServerTests: XCTestCase {
         XCTAssertThrowsError(try Settings.validatedURL("http://example.com"))
         XCTAssertThrowsError(try Settings.validatedURL("https://user:password@example.com"))
         XCTAssertNoThrow(try Settings.validatedURL("http://localhost:4981"))
+        XCTAssertNoThrow(try Settings.validatedURL("https://photo.fuckmmw.space"))
         XCTAssertNoThrow(try Settings.save("http://127.0.0.1:4981"))
         XCTAssertEqual(Settings.address, "http://127.0.0.1:4981")
         UserDefaults.standard.removeObject(forKey: "serverAddress")

@@ -1,7 +1,7 @@
 import Foundation
 
 enum Settings {
-    static let defaultAddress = "http://localhost:4981"
+    static let defaultAddress = "https://photo.fuckmmw.space"
     static let model = "gemini-3.6-flash"
     // Replace this instruction in a later iteration; no prompt editor in the extension.
     static let prompt = "Process the attached photograph while preserving its subjects, faces and composition. Return the resulting photograph as an image, not a text description."

@@ -18,7 +18,7 @@ struct ConnectionView: View {
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("Server connection") {
-                    TextField("http://localhost:4981", text: $address)
+                    TextField("https://photo.fuckmmw.space", text: $address)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                     Button("Save and check connection") {
                         checking = true
@@ -32,10 +32,10 @@ struct ConnectionView: View {
                     }.disabled(checking)
                     if checking { ProgressView() }
                     if !message.isEmpty { Text(message).font(.footnote) }
-                    Text("Keep your SSH tunnel connected while editing. Google cookies stay on the server.")
+                    Text("The phone talks to \(Settings.defaultAddress) over HTTPS. That hostname reaches the Gemini proxy on the server. localhost on the phone is the phone, not the VPS.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if !Settings.appGroupAvailable {
-                        Text("This sideload install has no App Group, which is normal for Feather. The Photos extension uses the default URL \(Settings.defaultAddress) unless you later sign with a profile that includes App Groups.")
+                        Text("Feather installs usually have no App Group, so the Photos extension uses \(Settings.defaultAddress) even if you change this field.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
