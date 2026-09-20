@@ -17,6 +17,15 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let retry = UIButton(type: .system)
 
+    override func loadView() {
+        // Photos may ask the principal class for its view before viewDidLoad.  A
+        // programmatic root avoids a zero-sized/black extension host while the
+        // PHContentEditingInput is still being delivered.
+        let root = UIView(frame: .zero)
+        root.backgroundColor = .systemBackground
+        view = root
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
@@ -44,6 +53,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
             stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
             stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
             stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
             preview.heightAnchor.constraint(greaterThanOrEqualToConstant: 160)
         ])
         preview.setContentHuggingPriority(.defaultLow, for: .vertical)
@@ -53,7 +63,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
         if input == nil {
-            status.text = "Waiting for the photograph from Photos…"
+            setStatus("Waiting for the photograph from Photos…")
         }
     }
 
@@ -63,7 +73,9 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         loadViewIfNeeded()
         task?.cancel()
         input = contentEditingInput
-        preview.image = placeholderImage
+        DispatchQueue.main.async { [weak self] in
+            self?.preview.image = placeholderImage
+        }
         beginProcessing()
     }
     @objc private func retryProcessing() { guard !pending else { return }; beginProcessing() }
@@ -75,9 +87,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         generation = attempt
         result = nil
         pending = true
-        retry.isHidden = true
-        spinner.startAnimating()
-        status.text = "Preparing photograph…"
+        setProcessingUI()
         guard let input, input.mediaType == .image, !input.mediaSubtypes.contains(.photoLive), let source = input.fullSizeImageURL else {
             fail("Only full-size still photographs are supported. Download the photo from iCloud in Photos and try again.")
             return
@@ -91,20 +101,23 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
                 let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, directory: work) }
                 let request = try await withTaskCancellationHandler(operation: { try await preparation.value }, onCancel: { preparation.cancel() })
                 try Task.checkCancellation()
-                status.text = "Uploading and processing…"
+                setStatus("Uploading and processing…")
                 let client = GeminiClient(baseURL: try Settings.validatedURL(Settings.address))
                 let file = try await client.process(requestFile: request, directory: work)
                 try Task.checkCancellation()
                 guard generation == attempt else { return }
-                status.text = "Preparing result…"
+                setStatus("Preparing result…")
                 let image = try await Task.detached { try ImageFiles.preview(file) }.value
                 try Task.checkCancellation()
                 guard generation == attempt else { return }
                 result = file
-                preview.image = image
-                pending = false
-                spinner.stopAnimating()
-                status.text = "Ready. Tap Done to apply."
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, self.generation == attempt else { return }
+                    self.preview.image = image
+                    self.pending = false
+                    self.spinner.stopAnimating()
+                    self.status.text = "Ready. Tap Done to apply."
+                }
                 try? FileManager.default.removeItem(at: request)
             } catch {
                 if generation == attempt && !Task.isCancelled { fail(error.localizedDescription) }
@@ -116,10 +129,26 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     }
 
     private func fail(_ message: String) {
-        pending = false
-        spinner.stopAnimating()
-        status.text = message
-        retry.isHidden = false
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.pending = false
+            self.spinner.stopAnimating()
+            self.status.text = message
+            self.retry.isHidden = false
+        }
+    }
+
+    private func setStatus(_ value: String) {
+        DispatchQueue.main.async { [weak self] in self?.status.text = value }
+    }
+
+    private func setProcessingUI() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.retry.isHidden = true
+            self.spinner.startAnimating()
+            self.status.text = "Preparing photograph…"
+        }
     }
     func finishContentEditing(completionHandler: @escaping (PHContentEditingOutput?) -> Void) {
         let attempt = generation
