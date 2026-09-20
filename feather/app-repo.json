@@ -10,21 +10,21 @@
       "bundleIdentifier": "com.example.PhotoServer",
       "developerName": "fuckmmw",
       "iconURL": "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
-      "localizedDescription": "Unsigned iOS app with a Photo Editing Extension. Sign in Feather, delete the old PhotoServer, install this build, then use Photos \u2192 Edit \u2192 \u22ef \u2192 PhotoServer.",
+      "localizedDescription": "Unsigned iOS app with a Photo Editing Extension. Uses https://photo.fuckmmw.space. Sign in Feather, delete the old app, install, then Photos \u2192 Edit \u2192 \u22ef \u2192 PhotoServer.",
       "subtitle": "Photo Editing Extension for Gemini Web",
       "tintColor": "5B8DEF",
       "versions": [
         {
-          "version": "1.0.1",
-          "date": "2026-09-20T14:55:00Z",
-          "size": 106810,
+          "version": "1.0.2",
+          "date": "2026-09-20T17:53:00Z",
+          "size": 106867,
           "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
         }
       ],
       "appPermissions": {},
-      "version": "1.0.1",
-      "versionDate": "2026-09-20T14:55:00Z",
-      "size": 106810,
+      "version": "1.0.2",
+      "versionDate": "2026-09-20T17:53:00Z",
+      "size": 106867,
       "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
     }
   ]
