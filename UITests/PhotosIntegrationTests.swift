@@ -39,6 +39,9 @@ final class PhotosIntegrationTests: XCTestCase {
         more.tap()
         let menu = XCTAttachment(screenshot: photos.screenshot())
         menu.name = "Photos-extension-menu"; menu.lifetime = .keepAlways; add(menu)
+        let extensions = photos.buttons["Extensions"]
+        guard extensions.waitForExistence(timeout: 5) else { XCTFail("Extensions submenu unavailable in this runtime's accessibility tree."); return }
+        extensions.tap()
         let entry = photos.buttons["PhotoServer"]
         guard entry.waitForExistence(timeout: 5) else { XCTFail("PhotoServer is not exposed in the simulator menu."); return }
         entry.tap()
