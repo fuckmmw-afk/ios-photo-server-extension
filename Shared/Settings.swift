@@ -6,7 +6,15 @@ enum Settings {
     // Replace this instruction in a later iteration; no prompt editor in the extension.
     static let prompt = "Process the attached photograph while preserving its subjects, faces and composition. Return the resulting photograph as an image, not a text description."
     static var groupID: String { Bundle.main.object(forInfoDictionaryKey: "PhotoServerAppGroup") as? String ?? "group.com.example.PhotoServer" }
-    static var defaults: UserDefaults { UserDefaults(suiteName: groupID) ?? .standard }
+    static var appGroupAvailable: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) != nil
+    }
+    // Sideload certificates (Feather) usually have no App Group. Fall back to this process's defaults
+    // and the compiled default URL so the Photos extension can still run.
+    static var defaults: UserDefaults {
+        if appGroupAvailable, let suite = UserDefaults(suiteName: groupID) { return suite }
+        return .standard
+    }
     static var address: String { defaults.string(forKey: "serverAddress") ?? defaultAddress }
 
     static func validatedURL(_ address: String) throws -> URL {
@@ -20,10 +28,8 @@ enum Settings {
     }
     static func save(_ address: String) throws {
         let url = try validatedURL(address)
-        guard FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) != nil else {
-            throw PhotoError.message("App Group is unavailable. The installed app and extension must have matching App Group entitlements.")
-        }
         defaults.set(url.absoluteString, forKey: "serverAddress")
+        defaults.synchronize()
     }
 }
 

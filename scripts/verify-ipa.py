@@ -12,7 +12,8 @@ with zipfile.ZipFile(sys.argv[1]) as archive:
     ext_info = plistlib.loads(archive.read(ext + 'Info.plist'))
     assert ext_info['CFBundleIdentifier'].startswith(app_info['CFBundleIdentifier'] + '.')
     assert ext_info['NSExtension']['NSExtensionPointIdentifier'] == 'com.apple.photo-editing'
-    assert ext_info['NSExtension']['NSExtensionPrincipalClass'].endswith('.PhotoEditingViewController')
+    principal = ext_info['NSExtension']['NSExtensionPrincipalClass']
+    assert principal == 'PhotoEditingViewController' or principal.endswith('.PhotoEditingViewController')
     for path, info in [(app, app_info), (ext, ext_info)]:
         assert path + info['CFBundleExecutable'] in names
         assert info['MinimumOSVersion'] == '18.0'

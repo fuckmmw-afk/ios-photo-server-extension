@@ -50,7 +50,9 @@ Proxy остаётся на серверном `127.0.0.1:4981`. Для iPhone �
 
 Единый файл `Config/Identifiers.xcconfig`: `com.example.PhotoServer`, дочерний `com.example.PhotoServer.PhotoEditingExtension`, App Group `group.com.example.PhotoServer`. Entitlements app и extension содержат одинаковую группу. Cookie/API keys в app, plist и entitlements отсутствуют. Для доступа к текущему asset расширению не нужен общий Photo Library permission.
 
-При внешнем подписании IDs и App Group должны быть согласованы для обоих targets. Инструкции по сертификатам не входят в проект.
+Sideload через Feather обычно **не даёт App Groups**. Приложение и Photos-расширение тогда используют URL по умолчанию `http://localhost:4981`. Этого достаточно, если на iPhone поднят SSH-туннель на этот порт. Поле адреса в приложении проверяет связь из самого приложения; без App Group расширение его не увидит.
+
+При внешнем подписании профилем с App Groups идентификаторы app/extension и группа должны совпадать. Инструкции по сертификатам не входят в проект.
 
 ## Сборка и тестирование
 

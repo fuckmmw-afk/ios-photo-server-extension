@@ -2,7 +2,9 @@ import UIKit
 import Photos
 import PhotosUI
 
-@MainActor
+// ObjC name must stay stable after Feather resigns the IPA. Do not put @MainActor on the class:
+// Photos instantiates NSExtensionPrincipalClass from Objective-C.
+@objc(PhotoEditingViewController)
 final class PhotoEditingViewController: UIViewController, PHContentEditingController {
     private var input: PHContentEditingInput?
     private var task: Task<Void, Never>?
@@ -20,24 +22,39 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         view.backgroundColor = .systemBackground
         preview.contentMode = .scaleAspectFit
         preview.accessibilityLabel = "Processed photograph"
+        preview.backgroundColor = .secondarySystemFill
         status.numberOfLines = 0
         status.accessibilityIdentifier = "PhotoServerStatus"
         status.textAlignment = .center
+        status.font = .preferredFont(forTextStyle: .body)
+        status.textColor = .label
+        status.text = "Starting PhotoServer…"
         retry.setTitle("Retry", for: .normal)
         retry.addTarget(self, action: #selector(retryProcessing), for: .touchUpInside)
         retry.isHidden = true
+        spinner.hidesWhenStopped = true
+        spinner.startAnimating()
         let stack = UIStackView(arrangedSubviews: [preview, spinner, status, retry])
         stack.axis = .vertical
         stack.spacing = 16
+        stack.alignment = .fill
         stack.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(stack)
         NSLayoutConstraint.activate([
             stack.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -16),
             stack.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 16),
-            stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16)
+            stack.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            preview.heightAnchor.constraint(greaterThanOrEqualToConstant: 160)
         ])
         preview.setContentHuggingPriority(.defaultLow, for: .vertical)
+        status.setContentCompressionResistancePriority(.required, for: .vertical)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        if input == nil {
+            status.text = "Waiting for the photograph from Photos…"
+        }
     }
 
     func canHandle(_ adjustmentData: PHAdjustmentData) -> Bool { false }

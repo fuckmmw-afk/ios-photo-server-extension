@@ -32,7 +32,12 @@ struct ConnectionView: View {
                     }.disabled(checking)
                     if checking { ProgressView() }
                     if !message.isEmpty { Text(message).font(.footnote) }
-                    Text("Keep your SSH tunnel connected while editing. Google cookies stay on the server.").font(.footnote).foregroundStyle(.secondary)
+                    Text("Keep your SSH tunnel connected while editing. Google cookies stay on the server.")
+                        .font(.footnote).foregroundStyle(.secondary)
+                    if !Settings.appGroupAvailable {
+                        Text("This sideload install has no App Group, which is normal for Feather. The Photos extension uses the default URL \(Settings.defaultAddress) unless you later sign with a profile that includes App Groups.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
                 }
             }.navigationTitle("PhotoServer")
         }
