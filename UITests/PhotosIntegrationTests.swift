@@ -42,7 +42,9 @@ final class PhotosIntegrationTests: XCTestCase {
         let extensions = photos.buttons["Extensions"]
         guard extensions.waitForExistence(timeout: 5) else { XCTFail("Extensions submenu unavailable in this runtime's accessibility tree."); return }
         extensions.tap()
-        let entry = photos.buttons["PhotoServer"]
+        // In iOS 26 the extension picker presents activities as cells, not
+        // buttons.  The cell label is the extension's display name.
+        let entry = photos.cells.matching(NSPredicate(format: "label == %@", "PhotoServer")).firstMatch
         guard entry.waitForExistence(timeout: 5) else { XCTFail("PhotoServer is not exposed in the simulator menu."); return }
         entry.tap()
         XCTAssertTrue(photos.staticTexts["PhotoServerStatus"].waitForExistence(timeout: 15), "Extension must show automatic processing status without a Start button.")
