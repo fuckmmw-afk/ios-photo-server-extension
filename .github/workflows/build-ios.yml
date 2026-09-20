@@ -76,3 +76,22 @@ jobs:
         run: |
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --title "PhotoServer $TAG" --notes "Unsigned iOS app with embedded Photo Editing Extension. See README for verified compatibility and device-test requirements."
           gh release upload "$TAG" PhotoServer-unsigned.ipa --clobber
+  publish-feather-ipa:
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: PhotoServer-unsigned
+      - name: Publish direct IPA for the bundled Feather source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TARGET_SHA: ${{ github.sha }}
+        run: |
+          gh release view photo-latest >/dev/null 2>&1 || \
+            gh release create photo-latest --target "$TARGET_SHA" --title "PhotoServer latest unsigned IPA" --notes "Direct unsigned IPA for the bundled Feather source."
+          gh release upload photo-latest PhotoServer-unsigned.ipa --clobber

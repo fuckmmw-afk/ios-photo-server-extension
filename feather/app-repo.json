@@ -15,17 +15,18 @@
       "tintColor": "5B8DEF",
       "versions": [
         {
-          "version": "1.0.2",
-          "date": "2026-09-20T17:53:00Z",
-          "size": 106867,
-          "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
+      "version": "1.0.3",
+      "date": "2026-09-20T19:30:00Z",
+      "size": 106867,
+      "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/photo-latest/PhotoServer-unsigned.ipa"
         }
       ],
       "appPermissions": {},
-      "version": "1.0.2",
-      "versionDate": "2026-09-20T17:53:00Z",
+      "version": "1.0.3",
+      "versionDate": "2026-09-20T19:30:00Z",
+      "versionDescription": "Fixes the initial blank Photo Editing Extension view and guarantees that Photos UI updates run on the main thread.",
       "size": 106867,
-      "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/ipa-1.0.0/PhotoServer-unsigned.ipa"
+      "downloadURL": "https://github.com/fuckmmw-afk/ios-photo-server-extension/releases/download/photo-latest/PhotoServer-unsigned.ipa"
     }
   ]
 }
