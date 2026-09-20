@@ -26,7 +26,11 @@ final class PhotosIntegrationTests: XCTestCase {
             XCTFail("Photos library could not be navigated automatically; inspect Photos-start screenshot.")
             return
         }
-        photo.tap()
+        // iOS 26 exposes grid items as Image accessibility elements but does
+        // not mark them hittable, even when no sheet is on screen.  Tap the
+        // centre of the confirmed, first visible grid cell via the Photos
+        // window instead of relying on that incorrect hittability flag.
+        photos.coordinate(withNormalizedOffset: CGVector(dx: 0.17, dy: 0.23)).tap()
         let edit = photos.buttons["Edit"]
         guard edit.waitForExistence(timeout: 5) else { XCTFail("Edit button unavailable in this runtime's accessibility tree."); return }
         edit.tap()
