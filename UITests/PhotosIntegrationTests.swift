@@ -8,6 +8,8 @@ final class PhotosIntegrationTests: XCTestCase {
         sleep(3)
         let attachment = XCTAttachment(screenshot: photos.screenshot())
         attachment.name = "Photos-start"; attachment.lifetime = .keepAlways; add(attachment)
+        let hierarchy = XCTAttachment(string: photos.debugDescription)
+        hierarchy.name = "Photos-accessibility-tree"; hierarchy.lifetime = .keepAlways; add(hierarchy)
         // Photos onboarding and accessibility identifiers vary across runtimes.
         // Preserve evidence instead of counting an unavailable UI as a passing integration test.
         let photo = photos.images.matching(NSPredicate(format: "label CONTAINS[c] 'Photo' OR label CONTAINS[c] 'Screenshot'")).firstMatch
@@ -26,6 +28,7 @@ final class PhotosIntegrationTests: XCTestCase {
         let entry = photos.buttons["PhotoServer"]
         guard entry.waitForExistence(timeout: 5) else { throw XCTSkip("PhotoServer not exposed in simulator menu; cannot confirm physical-device availability.") }
         entry.tap()
+        XCTAssertTrue(photos.staticTexts["PhotoServerStatus"].waitForExistence(timeout: 15), "Extension must show automatic processing status without a Start button.")
         let opened = XCTAttachment(screenshot: photos.screenshot())
         opened.name = "PhotoServer-opened"; opened.lifetime = .keepAlways; add(opened)
     }

@@ -21,6 +21,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         preview.contentMode = .scaleAspectFit
         preview.accessibilityLabel = "Processed photograph"
         status.numberOfLines = 0
+        status.accessibilityIdentifier = "PhotoServerStatus"
         status.textAlignment = .center
         retry.setTitle("Retry", for: .normal)
         retry.addTarget(self, action: #selector(retryProcessing), for: .touchUpInside)
@@ -52,6 +53,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
 
     private func beginProcessing() {
         task?.cancel()
+        cleanup()
         let attempt = UUID()
         generation = attempt
         result = nil

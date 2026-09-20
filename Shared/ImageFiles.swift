@@ -2,6 +2,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import UIKit
+import CoreImage
 
 enum ImageFiles {
     static let maxInputBytes = 25 * 1024 * 1024
@@ -35,13 +36,24 @@ enum ImageFiles {
         guard width > 0, height > 0, width * height <= 48_000_000 else {
             throw PhotoError.message("The returned image exceeds the 48 MP rendering budget. It has not been resized or saved.")
         }
-        if mime == "image/jpeg" {
+        let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.int32Value ?? 1
+        if mime == "image/jpeg" && orientation == 1 {
             try FileManager.default.copyItem(at: result, to: destination)
         } else {
             guard let writer = CGImageDestinationCreateWithURL(destination as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
                 throw PhotoError.message("Cannot prepare the Photos output file.")
             }
-            CGImageDestinationAddImageFromSource(writer, source, 0, [kCGImageDestinationLossyCompressionQuality: 1.0] as CFDictionary)
+            // Photos requires physically upright pixels, not just an EXIF rotation flag.
+            if orientation == 1 {
+                CGImageDestinationAddImageFromSource(writer, source, 0, [kCGImageDestinationLossyCompressionQuality: 1.0, kCGImagePropertyOrientation: 1] as CFDictionary)
+            } else {
+                guard let cg = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw PhotoError.message("Cannot decode result orientation.") }
+                let oriented = CIImage(cgImage: cg).oriented(forExifOrientation: orientation)
+                let space = cg.colorSpace?.model == .rgb ? cg.colorSpace! : CGColorSpace(name: CGColorSpace.sRGB)!
+                let context = CIContext(options: [.cacheIntermediates: false])
+                guard let upright = context.createCGImage(oriented, from: oriented.extent, format: .RGBA8, colorSpace: space) else { throw PhotoError.message("Cannot render upright result.") }
+                CGImageDestinationAddImage(writer, upright, [kCGImageDestinationLossyCompressionQuality: 1.0, kCGImagePropertyOrientation: 1] as CFDictionary)
+            }
             guard CGImageDestinationFinalize(writer) else { throw PhotoError.message("Cannot encode the Photos result.") }
         }
     }

@@ -27,14 +27,24 @@ jobs:
           xcodebuild -list -project PhotoServer.xcodeproj | tee build/targets.txt
       - name: Build and validate unsigned IPA
         run: bash scripts/build-unsigned.sh
-      - name: Unit tests and Photos entry-point probe
-        run: bash scripts/test-simulator.sh
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: PhotoServer-unsigned
           path: build/PhotoServer-unsigned.ipa
           if-no-files-found: error
+      - name: Unit tests and Photos entry-point probe
+        run: bash scripts/test-simulator.sh
+      - name: Export test summaries and Photos screenshots
+        if: always()
+        run: |
+          if [ -d build/UnitTests.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path build/UnitTests.xcresult > build/unit-summary.json || true
+          fi
+          if [ -d build/PhotosIntegration.xcresult ]; then
+            xcrun xcresulttool get test-results summary --path build/PhotosIntegration.xcresult > build/photos-summary.json || true
+            xcrun xcresulttool export attachments --path build/PhotosIntegration.xcresult --output-path build/photos-attachments || true
+          fi
       - name: Upload project and verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -44,6 +54,8 @@ jobs:
             PhotoServer.xcodeproj
             build/*.log
             build/*.txt
+            build/*summary.json
+            build/photos-attachments
             build/*.xcresult
           retention-days: 14
   release:

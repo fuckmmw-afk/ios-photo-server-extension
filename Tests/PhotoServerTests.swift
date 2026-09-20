@@ -1,5 +1,7 @@
 import XCTest
 import UIKit
+import ImageIO
+import UniformTypeIdentifiers
 @testable import PhotoServer
 
 final class StubProtocol: URLProtocol {
@@ -52,6 +54,20 @@ final class PhotoServerTests: XCTestCase {
         XCTAssertThrowsError(try Settings.validatedURL("http://example.com"))
         XCTAssertThrowsError(try Settings.validatedURL("https://user:password@example.com"))
         XCTAssertNoThrow(try Settings.validatedURL("http://localhost:4981"))
+    }
+    func testExifRotationIsBakedIntoPhotosOutput() throws {
+        let input = directory.appendingPathComponent("rotated.jpg")
+        let writer = try XCTUnwrap(CGImageDestinationCreateWithURL(input as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
+        let image = try XCTUnwrap(UIImage(data: png())?.cgImage)
+        CGImageDestinationAddImage(writer, image, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(writer))
+        let output = directory.appendingPathComponent("upright.jpg")
+        try ImageFiles.prepareJPEG(from: input, to: output)
+        let source = try ImageFiles.source(output)
+        let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertEqual((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
+        XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, image.height)
+        XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, image.width)
     }
     func testConnectionUsingURLProtocol() async throws {
         let config = URLSessionConfiguration.ephemeral
