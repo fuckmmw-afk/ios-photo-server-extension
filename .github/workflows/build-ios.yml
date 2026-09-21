@@ -58,6 +58,62 @@ jobs:
             build/photos-attachments
             build/*.xcresult
           retention-days: 14
+  publish-feather:
+    name: Publish Feather source
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: PhotoServer-unsigned
+          path: artifact
+      - name: Publish IPA and update source
+        env:
+          FEATHER_DEPLOY_KEY: ${{ secrets.FEATHER_DEPLOY_KEY }}
+          FEATHER_REPOSITORY: fuckmmw-afk/PhotoServer-Feather
+        run: |
+          test -n "$FEATHER_DEPLOY_KEY"
+          key_path="$RUNNER_TEMP/photoserver-feather-deploy-key"
+          umask 077
+          printf '%s\n' "$FEATHER_DEPLOY_KEY" > "$key_path"
+          export GIT_SSH_COMMAND="ssh -i $key_path -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone "git@github.com:${FEATHER_REPOSITORY}.git" feather-source
+          version=$(awk -F ' = ' '/^MARKETING_VERSION =/{print $2}' Config/Identifiers.xcconfig)
+          build=$(awk -F ' = ' '/^CURRENT_PROJECT_VERSION =/{print $2}' Config/Identifiers.xcconfig)
+          ipa=$(find artifact -maxdepth 1 -type f -name '*.ipa' -print -quit)
+          test -n "$ipa"
+          filename="PhotoServer-${version}-${build}.ipa"
+          mkdir -p feather-source/releases
+          cp "$ipa" "feather-source/releases/$filename"
+          size=$(wc -c < "feather-source/releases/$filename" | tr -d ' ')
+          published=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          download_url="https://raw.githubusercontent.com/${FEATHER_REPOSITORY}/main/releases/${filename}"
+          jq --arg version "$version" --arg build "$build" --arg date "$published" --arg url "$download_url" --argjson size "$size" '
+            .apps |= map(if .bundleIdentifier == "app.capricorn1136.rose5722" then
+              .versions |= ([{
+                version: $version,
+                buildVersion: $build,
+                date: $date,
+                localizedDescription: "Automated GitHub build published for Feather.",
+                downloadURL: $url,
+                size: $size,
+                minOSVersion: "18.0"
+              }] + map(select(.version != $version or .buildVersion != $build)))
+            else . end)
+          ' feather-source/apps.json > feather-source/apps.json.new
+          mv feather-source/apps.json.new feather-source/apps.json
+          cd feather-source
+          git config user.name "PhotoServer CI"
+          git config user.email "photoserver-ci@users.noreply.github.com"
+          git add apps.json releases
+          if ! git diff --cached --quiet; then
+            git commit -m "Publish PhotoServer ${version} (${build})"
+            git push origin main
+          fi
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: build
