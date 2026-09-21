@@ -27,12 +27,20 @@ final class PhotosIntegrationTests: XCTestCase {
             return
         }
         // iOS 26 exposes grid items as Image accessibility elements but does
-        // not mark them hittable, even when no sheet is on screen.  Tap the
-        // centre of the confirmed, first visible grid cell via the Photos
-        // window instead of relying on that incorrect hittability flag.
-        photos.coordinate(withNormalizedOffset: CGVector(dx: 0.17, dy: 0.23)).tap()
+        // not mark them hittable, even when no sheet is on screen. Tap the
+        // centre of the confirmed cell's frame rather than a fixed window
+        // coordinate: the latter can land in navigation chrome on a freshly
+        // migrated Photos library.
+        let photoCenter = photo.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        photoCenter.tap()
         let edit = photos.buttons["Edit"]
-        guard edit.waitForExistence(timeout: 5) else { XCTFail("Edit button unavailable in this runtime's accessibility tree."); return }
+        if !edit.waitForExistence(timeout: 8) {
+            // Photos occasionally drops the first synthesized tap while it is
+            // finishing the initial library transition. The same identified
+            // photo is tapped again; the test still fails if Edit is absent.
+            photoCenter.tap()
+        }
+        guard edit.waitForExistence(timeout: 8) else { XCTFail("Edit button unavailable after opening the confirmed Photos grid item."); return }
         edit.tap()
         let more = photos.buttons["More"]
         guard more.waitForExistence(timeout: 5) else { XCTFail("More menu unavailable in this runtime's accessibility tree."); return }
