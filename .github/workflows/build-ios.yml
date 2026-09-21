@@ -92,18 +92,29 @@ jobs:
           size=$(wc -c < "feather-source/releases/$filename" | tr -d ' ')
           published=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           download_url="https://raw.githubusercontent.com/${FEATHER_REPOSITORY}/main/releases/${filename}"
+          # Feather's importer accepts the classic AltStore source schema.
+          # It requires an app-level version/versionDate (not AltStore PAL's
+          # nested versions array), otherwise it reports a parse failure.
           jq --arg version "$version" --arg build "$build" --arg date "$published" --arg url "$download_url" --argjson size "$size" '
-            .apps |= map(if .bundleIdentifier == "app.capricorn1136.rose5722" then
-              .versions |= ([{
+            {
+              name: "PhotoServer",
+              identifier: "app.capricorn1136.rose5722.source",
+              sourceURL: "https://raw.githubusercontent.com/fuckmmw-afk/PhotoServer-Feather/main/apps.json",
+              apps: [{
+                name: "PhotoServer",
+                bundleIdentifier: "app.capricorn1136.rose5722",
+                developerName: "PhotoServer",
+                subtitle: "Process photos from Apple Photos",
                 version: $version,
-                buildVersion: $build,
-                date: $date,
-                localizedDescription: "Automated GitHub build published for Feather.",
+                versionDate: $date,
+                versionDescription: "Automated GitHub build published for Feather (build " + $build + ").",
                 downloadURL: $url,
-                size: $size,
-                minOSVersion: "18.0"
-              }] + map(select(.version != $version or .buildVersion != $build)))
-            else . end)
+                localizedDescription: "Open a photo in Apple Photos, choose Edit, then select PhotoServer. Feather signs this IPA using your configured certificate and provisioning profile.",
+                iconURL: "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
+                tintColor: "0A84FF",
+                size: $size
+              }]
+            }
           ' feather-source/apps.json > feather-source/apps.json.new
           mv feather-source/apps.json.new feather-source/apps.json
           cd feather-source

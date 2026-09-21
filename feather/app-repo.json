@@ -1,8 +1,21 @@
 {
   "name": "PhotoServer",
-  "identifier": "com.example.PhotoServer.source",
-  "iconURL": "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
-  "website": "https://github.com/fuckmmw-afk/ios-photo-server-extension",
-  "subtitle": "Deprecated: requires App Group signing",
-  "apps": []
+  "identifier": "app.capricorn1136.rose5722.source",
+  "sourceURL": "https://raw.githubusercontent.com/fuckmmw-afk/PhotoServer-Feather/main/apps.json",
+  "apps": [
+    {
+      "name": "PhotoServer",
+      "bundleIdentifier": "app.capricorn1136.rose5722",
+      "developerName": "PhotoServer",
+      "subtitle": "Process photos from Apple Photos",
+      "version": "1.1.2",
+      "versionDate": "2026-09-21T00:00:00Z",
+      "versionDescription": "AltStore-compatible Feather source. The signed IPA is published automatically by GitHub Actions.",
+      "downloadURL": "https://raw.githubusercontent.com/fuckmmw-afk/PhotoServer-Feather/main/releases/PhotoServer-1.1.2-11.ipa",
+      "localizedDescription": "Open a photo in Apple Photos, choose Edit, then select PhotoServer. Feather signs this IPA using your configured certificate and provisioning profile.",
+      "iconURL": "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
+      "tintColor": "0A84FF",
+      "size": 0
+    }
+  ]
 }
