@@ -29,17 +29,22 @@ struct ConnectionView: View {
                             defer { checking = false }
                             do {
                                 let configuration = try Settings.configuration(address: address, apiKey: apiKey)
-                                message = try await GeminiClient(configuration: configuration).checkConnection()
+                                let connected = try await GeminiClient(configuration: configuration).checkConnection()
+                                guard Settings.appGroupAvailable else {
+                                    message = "\(connected), but this install cannot save credentials for the Photos extension. Re-sign both targets with an App Group profile."
+                                    return
+                                }
                                 try Settings.save(configuration)
+                                message = connected
                             } catch { message = error.localizedDescription }
                         }
-                    }.disabled(checking || !Settings.appGroupAvailable)
+                    }.disabled(checking)
                     if checking { ProgressView() }
                     if !message.isEmpty { Text(message).font(.footnote) }
                     Text("Use HTTPS for a remote server. HTTP is allowed only for localhost or an SSH tunnel. The API key is shared only by this app and its Photos extension through the App Group.")
                         .font(.footnote).foregroundStyle(.secondary)
                     if !Settings.appGroupAvailable {
-                        Text("This build has no usable App Group. Re-sign it with a profile that authorizes \(Settings.groupID); otherwise the extension cannot safely receive its server credentials.")
+                        Text("You can test the connection, but this build has no usable App Group. Re-sign both the app and extension with a profile that authorizes \(Settings.groupID) before Photos can receive its server credentials.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                 }
