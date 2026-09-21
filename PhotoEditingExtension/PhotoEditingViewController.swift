@@ -131,7 +131,10 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
                 try? FileManager.default.removeItem(at: request)
                 try? FileManager.default.removeItem(at: file)
             } catch {
-                if generation == attempt && !Task.isCancelled { fail(error.localizedDescription) }
+                if generation == attempt && !Task.isCancelled {
+                    Diagnostics.report(configuration: configuration, operation: "photo_edit", error: error)
+                    fail(error.localizedDescription)
+                }
             }
             if result != prepared {
                 try? FileManager.default.removeItem(at: work)
