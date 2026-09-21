@@ -6,7 +6,7 @@ enum Settings {
     static let serverAPIKeyKey = "serverAPIKey"
     // Replace this instruction in a later iteration; no prompt editor in the extension.
     static let prompt = "Process the attached photograph while preserving its subjects, faces and composition. Return the resulting photograph as an image, not a text description."
-    static var groupID: String { Bundle.main.object(forInfoDictionaryKey: "PhotoServerAppGroup") as? String ?? "group.com.example.PhotoServer" }
+    static var groupID: String { Bundle.main.object(forInfoDictionaryKey: "PhotoServerAppGroup") as? String ?? "group.64bb0d6b088653aa.3" }
     static var appGroupAvailable: Bool {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) != nil
     }

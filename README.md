@@ -48,9 +48,9 @@ Proxy слушает только `127.0.0.1:4981` на сервере. Для i
 
 ## Идентификаторы
 
-Единый файл `Config/Identifiers.xcconfig`: `com.example.PhotoServer`, дочерний `com.example.PhotoServer.PhotoEditingExtension`, App Group `group.com.example.PhotoServer`. Entitlements app и extension содержат одинаковую группу. Cookie/API keys в app, plist и entitlements отсутствуют; server URL и API key вводятся после установки и хранятся только в App Group. Для доступа к текущему asset расширению не нужен общий Photo Library permission.
+Единый файл `Config/Identifiers.xcconfig` содержит идентификаторы для профиля Feather: `app.capricorn1136.rose5722`, дочерний `app.capricorn1136.rose5722.PhotoEditingExtension`, App Group `group.64bb0d6b088653aa.3`. Entitlements app и extension содержат одинаковую группу. Cookie/API keys в app, plist и entitlements отсутствуют; server URL и API key вводятся после установки и хранятся только в App Group. Для доступа к текущему asset расширению не нужен общий Photo Library permission.
 
-Sideload через Feather без App Groups **не поддерживается**: он не может безопасно передать URL и API key в Photos extension. Подписывайте оба target профилем, который authorizes `group.com.example.PhotoServer`; идентификаторы app/extension и группа должны совпадать.
+Для Feather используйте профиль `00008101-0016702C2109001E30YBM6`, не включайте удаление embedded provisioning profile и не переопределяйте entitlements. Он authorizes `group.64bb0d6b088653aa.3`; идентификаторы app/extension и группа должны совпадать. Если Feather предлагает custom bundle ID, оставьте `app.capricorn1136.rose5722` — он сам сохранит суффикс `.PhotoEditingExtension` для вложенного target.
 
 ## Сборка и тестирование
 
