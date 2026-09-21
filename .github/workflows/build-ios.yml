@@ -107,7 +107,7 @@ jobs:
                 subtitle: "Process photos from Apple Photos",
                 version: $version,
                 versionDate: $date,
-                versionDescription: "Automated GitHub build published for Feather (build " + $build + ").",
+                versionDescription: ("Automated GitHub build published for Feather (build " + $build + ")."),
                 downloadURL: $url,
                 localizedDescription: "Open a photo in Apple Photos, choose Edit, then select PhotoServer. Feather signs this IPA using your configured certificate and provisioning profile.",
                 iconURL: "https://raw.githubusercontent.com/fuckmmw-afk/ios-photo-server-extension/main/feather/icon.png",
