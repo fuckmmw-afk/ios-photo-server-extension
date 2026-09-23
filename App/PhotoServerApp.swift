@@ -6,7 +6,7 @@ struct PhotoServerApp: App {
 }
 
 struct ConnectionView: View {
-    static let loginInstructions = "Откроется одноразовая ссылка в окне Chrome на сервере. В открывшемся окне войдите в Google, затем закройте окно Chrome. Мы проверим вход автоматически."
+    static let loginInstructions = "Откроется одноразовая ссылка в окне Chrome на сервере. Войдите в Google, затем нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
 
     @Environment(\.openURL) private var openURL
     @State private var address = Settings.address
@@ -119,7 +119,7 @@ struct ConnectionView: View {
                 let configuration = try Settings.configuration(address: address, apiKey: apiKey)
                 let url = try await GeminiClient(configuration: configuration).createLoginSession()
                 authState = "login_in_progress"
-                authMessage = "Ожидаем завершения входа. После закрытия окна Chrome мы проверим его автоматически."
+                authMessage = "После входа в Google нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
                 if let url { openURL(url) }
                 authPolling?.cancel()
                 authPolling = Task { @MainActor in

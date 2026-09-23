@@ -41,10 +41,10 @@ final class PhotoServerTests: XCTestCase {
             UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
         }
     }
-    func testGeminiLoginInstructionsTellUserToCloseChrome() {
+    func testGeminiLoginInstructionsTellUserToUseWrapperButton() {
         XCTAssertEqual(
             ConnectionView.loginInstructions,
-            "Откроется одноразовая ссылка в окне Chrome на сервере. В открывшемся окне войдите в Google, затем закройте окно Chrome. Мы проверим вход автоматически."
+            "Откроется одноразовая ссылка в окне Chrome на сервере. Войдите в Google, затем нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
         )
     }
     func testInputBytesAreNotReencoded() throws {
