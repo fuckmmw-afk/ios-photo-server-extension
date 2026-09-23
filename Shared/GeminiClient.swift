@@ -140,6 +140,41 @@ struct GeminiClient {
         return "Connected · \(Settings.model)"
     }
 
+    struct AuthStatus: Decodable {
+        let status: String
+        let message: String?
+    }
+
+    private struct LoginSession: Decodable {
+        let status: String
+        let url: URL?
+    }
+
+    func authStatus(check: Bool = false) async throws -> AuthStatus {
+        let path = check ? "api/gemini/auth/check" : "api/gemini/auth/status"
+        var request = authenticatedRequest(path: path)
+        if check { request.httpMethod = "POST" }
+        let (data, response) = try await session.data(for: request)
+        guard data.count <= 4096 else { throw PhotoError.message("Invalid Gemini auth status response.") }
+        try Self.check(response, data: data)
+        return try JSONDecoder().decode(AuthStatus.self, from: data)
+    }
+
+    func createLoginSession() async throws -> URL? {
+        var request = authenticatedRequest(path: "api/gemini/auth/login-session")
+        request.httpMethod = "POST"
+        let (data, response) = try await session.data(for: request)
+        guard data.count <= 4096 else { throw PhotoError.message("Invalid Gemini login response.") }
+        try Self.check(response, data: data)
+        let login = try JSONDecoder().decode(LoginSession.self, from: data)
+        guard let url = login.url else { return nil }
+        guard url.scheme == "https", url.host == configuration.baseURL.host,
+              url.path.hasPrefix("/gemini-login/start/") else {
+            throw PhotoError.message("The server returned an invalid Gemini login link.")
+        }
+        return url
+    }
+
     // Build a JSON upload file incrementally: no full-resolution UIImage, no giant JSON String.
     static func makeRequestFile(image: URL, orientation: Int32, directory: URL) throws -> URL {
         let size = try image.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0

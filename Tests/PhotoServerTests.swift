@@ -101,6 +101,24 @@ final class PhotoServerTests: XCTestCase {
         catch { XCTAssertTrue(error.localizedDescription.contains("429")) }
     }
 
+    func testGeminiAuthStatusAndOneTimeBrowserLink() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubProtocol.self]
+        let client = GeminiClient(configuration: try Settings.configuration(address: "https://unit.test", apiKey: "unit-key-with-sufficient-entropy"), session: URLSession(configuration: config))
+        StubProtocol.reply = (200, Data("{\"status\":\"login_required\",\"message\":\"Sign in\"}".utf8))
+        let status = try await client.authStatus(check: true)
+        XCTAssertEqual(status.status, "login_required")
+        XCTAssertEqual(StubProtocol.lastRequest?.httpMethod, "POST")
+        XCTAssertEqual(StubProtocol.lastRequest?.url?.path, "/api/gemini/auth/check")
+        StubProtocol.reply = (200, Data("{\"status\":\"login_in_progress\",\"url\":\"https://unit.test/gemini-login/start/opaque\"}".utf8))
+        let url = try await client.createLoginSession()
+        XCTAssertEqual(url?.path, "/gemini-login/start/opaque")
+        XCTAssertEqual(StubProtocol.lastRequest?.value(forHTTPHeaderField: "X-PhotoServer-Key"), "unit-key-with-sufficient-entropy")
+        StubProtocol.reply = (200, Data("{\"status\":\"login_in_progress\",\"url\":\"https://evil.test/gemini-login/start/opaque\"}".utf8))
+        do { _ = try await client.createLoginSession(); XCTFail("Expected an invalid-link error") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("invalid Gemini login link")) }
+    }
+
     func testProcessUsesProtectedBoundedResponseFileAndAPIKey() async throws {
         let request = directory.appendingPathComponent("request.json")
         try Data("{}".utf8).write(to: request)

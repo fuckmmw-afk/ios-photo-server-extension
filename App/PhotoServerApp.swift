@@ -6,10 +6,15 @@ struct PhotoServerApp: App {
 }
 
 struct ConnectionView: View {
+    @Environment(\.openURL) private var openURL
     @State private var address = Settings.address
     @State private var apiKey = Settings.apiKey
     @State private var message = ""
     @State private var checking = false
+    @State private var authState = "verifying"
+    @State private var authMessage = ""
+    @State private var startingLogin = false
+    @State private var authPolling: Task<Void, Never>?
     var body: some View {
         NavigationStack {
             // Do not use Form here. On the iOS 27 beta a Form can be backed by a
@@ -37,13 +42,14 @@ struct ConnectionView: View {
                                 do {
                                     configuration = try Settings.configuration(address: address, apiKey: apiKey)
                                     guard let configuration else { return }
-                                    let connected = try await GeminiClient(configuration: configuration).checkConnection()
                                     guard Settings.appGroupAvailable else {
-                                        message = "\(connected), but this install cannot save credentials for the Photos extension. Re-sign both targets with an App Group profile."
+                                        message = "This install cannot save credentials for the Photos extension. Re-sign both targets with an App Group profile."
                                         return
                                     }
                                     try Settings.save(configuration)
+                                    let connected = try await GeminiClient(configuration: configuration).checkConnection()
                                     message = connected
+                                    await refreshAuthStatus()
                                 } catch {
                                     if let configuration {
                                         Diagnostics.report(configuration: configuration, operation: "connection_check", error: error)
@@ -61,8 +67,66 @@ struct ConnectionView: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
+                    section("Gemini") {
+                        Text(authLabel).font(.subheadline)
+                        if !authMessage.isEmpty { Text(authMessage).font(.footnote).foregroundStyle(.secondary) }
+                        Button("Обновить вход Gemini") { startLogin() }
+                            .disabled(startingLogin || authState == "login_in_progress")
+                        Button("Проверить снова") { Task { await refreshAuthStatus(check: true) } }
+                            .disabled(startingLogin)
+                        if startingLogin { ProgressView() }
+                    }
                 }.padding(20)
             }.navigationTitle("PhotoServer")
+        }.onAppear { Task { await refreshAuthStatus() } }
+    }
+
+    private var authLabel: String {
+        switch authState {
+        case "authenticated": return "Подключено"
+        case "login_required": return "Требуется вход"
+        case "login_in_progress": return "Ожидание входа"
+        case "verifying": return "Проверка"
+        case "network_error": return "Ошибка сети"
+        default: return "Проверка"
+        }
+    }
+
+    @MainActor
+    private func refreshAuthStatus(check: Bool = false) async {
+        do {
+            let configuration = try Settings.configuration(address: address, apiKey: apiKey)
+            let status = try await GeminiClient(configuration: configuration).authStatus(check: check)
+            authState = status.status
+            authMessage = status.message ?? ""
+        } catch {
+            authState = "network_error"
+            authMessage = error.localizedDescription
+        }
+    }
+
+    private func startLogin() {
+        startingLogin = true
+        Task { @MainActor in
+            defer { startingLogin = false }
+            do {
+                let configuration = try Settings.configuration(address: address, apiKey: apiKey)
+                let url = try await GeminiClient(configuration: configuration).createLoginSession()
+                authState = "login_in_progress"
+                authMessage = "Ожидание входа в браузере на сервере."
+                if let url { openURL(url) }
+                authPolling?.cancel()
+                authPolling = Task { @MainActor in
+                    for _ in 0..<200 {
+                        try? await Task.sleep(for: .seconds(3))
+                        if Task.isCancelled { return }
+                        await refreshAuthStatus()
+                        if authState == "authenticated" || authState == "login_required" { return }
+                    }
+                }
+            } catch {
+                authMessage = error.localizedDescription
+            }
         }
     }
 
