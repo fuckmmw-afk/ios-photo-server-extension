@@ -72,7 +72,7 @@ struct ConnectionView: View {
                         Text(authLabel).font(.subheadline)
                         if !authMessage.isEmpty { Text(authMessage).font(.footnote).foregroundStyle(.secondary) }
                         Button("Обновить вход Gemini") { startLogin() }
-                            .disabled(startingLogin || authState == "login_in_progress")
+                            .disabled(startingLogin)
                         Button("Проверить снова") { Task { await refreshAuthStatus(check: true) } }
                             .disabled(startingLogin)
                         if startingLogin { ProgressView() }
