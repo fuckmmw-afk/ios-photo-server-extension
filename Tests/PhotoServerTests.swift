@@ -41,6 +41,13 @@ final class PhotoServerTests: XCTestCase {
             UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
         }
     }
+    func fixturePNG(size: CGSize) -> Data {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        return UIGraphicsImageRenderer(size: size, format: format).pngData { context in
+            UIColor.blue.setFill(); context.fill(CGRect(origin: .zero, size: size))
+        }
+    }
     func testGeminiLoginInstructionsTellUserToUseWrapperButton() {
         XCTAssertEqual(
             ConnectionView.loginInstructions,
@@ -48,7 +55,7 @@ final class PhotoServerTests: XCTestCase {
         )
     }
     func testInputIsNormalizedAndBundledPromptIsSent() throws {
-        let data = png(), url = directory.appendingPathComponent("source.png")
+        let data = fixturePNG(size: CGSize(width: 32, height: 24)), url = directory.appendingPathComponent("source.png")
         try data.write(to: url)
         let body = try GeminiClient.makeRequestFile(image: url, orientation: 6, model: "gemini-3.8-flash", directory: directory)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: body)) as? [String: Any])
@@ -71,9 +78,7 @@ final class PhotoServerTests: XCTestCase {
         for orientation in 1...8 {
             let portrait = orientation.isMultiple(of: 2)
             let size = portrait ? CGSize(width: 24, height: 32) : CGSize(width: 32, height: 24)
-            let data = UIGraphicsImageRenderer(size: size).pngData { context in
-                UIColor.blue.setFill(); context.fill(CGRect(origin: .zero, size: size))
-            }
+            let data = fixturePNG(size: size)
             let url = directory.appendingPathComponent("source-\(orientation).png")
             try data.write(to: url)
             let body = try GeminiClient.makeRequestFile(image: url, orientation: Int32(orientation), model: "gemini-test", directory: directory)
