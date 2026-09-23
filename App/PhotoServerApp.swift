@@ -53,6 +53,7 @@ struct ConnectionView: View {
                                 } catch {
                                     if let configuration {
                                         Diagnostics.report(configuration: configuration, operation: "connection_check", error: error)
+                                        await refreshAuthStatus()
                                     }
                                     message = error.localizedDescription
                                 }
