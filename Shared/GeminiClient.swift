@@ -188,18 +188,21 @@ struct GeminiClient {
     // Build a JSON upload file incrementally: no full-resolution UIImage, no giant JSON String.
     static func makeRequestFile(image: URL, orientation: Int32, model: String, directory: URL) throws -> URL {
         let size = try image.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size > 0, size <= ImageFiles.maxInputBytes else { throw PhotoError.message("The source must be at most 25 MiB. No image was resized.") }
+        guard size > 0, size <= ImageFiles.maxInputBytes else { throw PhotoError.message("The source must be at most 25 MiB.") }
         guard (1...8).contains(orientation) else { throw PhotoError.message("The source image has an invalid orientation.") }
-        let mime = try ImageFiles.mime(image)
+        _ = try ImageFiles.mime(image)
+        let normalized = directory.appendingPathComponent("upright-source.jpg")
+        try ImageFiles.prepareUprightJPEG(from: image, orientation: orientation, to: normalized)
+        let mime = try ImageFiles.mime(normalized)
         let url = directory.appendingPathComponent("request.json")
         guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.protectionKey: FileProtectionType.complete]) else {
             throw PhotoError.message("Cannot create the protected upload file.")
         }
         let writer = try FileHandle(forWritingTo: url)
         defer { try? writer.close() }
-        let reader = try FileHandle(forReadingFrom: image)
+        let reader = try FileHandle(forReadingFrom: normalized)
         defer { try? reader.close() }
-        let fields: [String: Any] = ["model": model, "prompt": Settings.prompt, "n": 1, "response_format": "b64_json", "input_orientation": orientation]
+        let fields: [String: Any] = ["model": model, "prompt": Settings.prompt, "n": 1, "response_format": "b64_json", "input_orientation": 1]
         var prefix = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
         prefix.removeLast()
         prefix.append(Data(",\"image\":\"data:\(mime);base64,".utf8))

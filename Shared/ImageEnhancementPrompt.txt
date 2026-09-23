@@ -1,0 +1,262 @@
+Analyze the uploaded image first before generating the result.
+
+Identify the real scene structure, main objects, materials, background layers, lighting logic, perspective, text elements, reflections, and all visible people.
+
+If a person is present, detect and preserve their identity and recognizable features exactly.
+
+Use this analysis as a strict guide for enhancement.
+
+Then enhance the image with strong but controlled restoration, intelligent denoising, artifact removal, upscale, cinematic color grading, physically consistent light refinement, and realistic optical depth of field.
+
+Treat this as high-end photo recovery, detail restoration, denoising, artifact cleanup, and super-resolution of the same exact photograph.
+
+Do not treat it as free image generation, redesign, creative reinterpretation, or uncontrolled reconstruction from scratch.
+
+MAIN OBJECTIVE:
+
+Create a cleaner, higher-resolution, naturally detailed version of the same image while recovering believable detail where it is partially visible or strongly implied by the source.
+
+The final result must look like the original photo captured with a much better camera, high-end fast lens, superior sensor, better dynamic range, cleaner optics, better noise performance, grading, and source quality, not like a newly invented image.
+
+The image must look CLEAN rather than artificially sharpened.
+
+Noise removal and suppression of oversharpening artifacts are higher priorities than maximizing apparent sharpness.
+
+REQUIRED WORKFLOW:
+
+1. Analyze the image composition, framing, geometry, depth, subject placement, background structure, lighting direction, shadows, highlights, color relationships, and texture distribution.
+
+2. Identify all objects and preserve their exact existence, position, scale, shape, and design.
+
+3. If faces or people are present, preserve identity exactly and protect facial structure and all recognizable traits.
+
+4. Determine which details are clearly visible, partially visible, weak but recoverable, or too ambiguous to restore reliably.
+
+5. Determine the original lighting logic and color mood before enhancement.
+
+6. Analyze focal planes and the distance between the main subject and the background.
+
+7. Analyze the image for sensor noise, digital noise, chroma noise, luminance noise, compression artifacts, ringing, halos, oversharpening, artificial micro-contrast, edge enhancement, and isolated bright pixels before applying enhancement.
+
+8. Distinguish genuine photographic detail and real specular reflections from sharpening artifacts, noise, false texture, and isolated white speckles.
+
+9. Enhance only after this analysis, using the source image as the primary truth.
+
+DENOISING, CLEANUP & OVERSHARPENING CONTROL:
+
+CRITICAL: Before adding any sharpness or detail enhancement, thoroughly clean the source image.
+
+Apply strong but intelligent photographic denoising while preserving genuine edges, forms, materials, reflections, text, and important textures.
+
+Remove excessive luminance noise, chroma noise, sensor grain, compression noise, JPEG artifacts, ringing, mosquito noise, false texture, pixel-level artifacts, and digital speckling.
+
+CRITICAL: Detect and remove artifacts caused by excessive sharpening.
+
+Remove isolated white dots, bright speckles, tiny white pinpoints, sparkling pixel artifacts, false micro-highlights, sharpening noise, edge ringing, halos, crunchy texture, and artificial high-frequency detail.
+
+Pay particular attention to dark areas, wet pavement, asphalt, water, shadows, walls, clothing, hair, foliage, distant backgrounds, and other textured surfaces where aggressive sharpening can generate hundreds of tiny white or bright dots.
+
+DO NOT preserve isolated white dots or tiny bright speckles when they are caused by noise, oversharpening, compression, ringing, or artificial texture enhancement.
+
+DO NOT recreate removed white speckles during the upscale or detail-recovery stage.
+
+DO NOT introduce new white dots, bright pinpoints, glitter-like artifacts, sparkling noise, fake reflections, fake droplets, artificial grain clusters, or high-frequency speckling anywhere in the image.
+
+DO NOT interpret noise or sharpening artifacts as genuine photographic detail.
+
+DO NOT convert existing noise into sharper, more defined noise during super-resolution.
+
+DO NOT enhance individual noisy pixels into visible points.
+
+DO NOT generate a “crunchy”, brittle, oversharpened, HDR-like, clarity-heavy, or excessively textured appearance.
+
+DO NOT use aggressive global sharpening.
+
+DO NOT use aggressive clarity, texture, structure, edge enhancement, or micro-contrast that produces visible pixel-level artifacts.
+
+DO NOT create halos around high-contrast edges, lights, silhouettes, text, buildings, vehicles, or reflections.
+
+DO NOT create artificial bright outlines around objects.
+
+Real light reflections and specular highlights that are clearly supported by the source must remain, but they should have natural photographic shapes, gradients, softness, and intensity rather than becoming clusters of tiny sharp white points.
+
+On wet roads, pavement, glass, water, metallic surfaces, and other reflective materials, preserve the broad real reflections and genuine highlights while removing pixel-sized sharpening artifacts and false sparkling texture.
+
+Large and clearly structured reflections are real scene content and must be preserved.
+
+Random isolated pixel-sized bright points that appear to result from oversharpening, noise, compression, or enhancement artifacts should be suppressed and blended naturally into the surrounding material.
+
+Dark and low-detail regions should remain clean, smooth, photographic, and naturally textured instead of being filled with artificially generated micro-detail.
+
+When uncertain whether a tiny high-frequency feature is real detail or noise, prefer conservative suppression rather than amplification.
+
+The final image should withstand close zoom inspection without revealing excessive white speckles, sharpening halos, noisy edges, artificial pores, crunchy surfaces, or synthetic micro-texture.
+
+SHARPNESS & DETAIL RECOVERY:
+
+Upscale the image significantly.
+
+Improve perceived clarity primarily through better resolution, clean edge reconstruction, tonal separation, accurate texture recovery, and removal of blur or compression artifacts, NOT through aggressive sharpening.
+
+Sharpness must be controlled, natural, optical, and source-constrained.
+
+Prefer clean medium-scale and large-scale detail over excessive pixel-level micro-detail.
+
+Preserve naturally smooth surfaces where appropriate.
+
+Do not force texture into surfaces that are naturally smooth or poorly resolved in the source.
+
+Increase edge definition only where genuine structural edges are supported by the source.
+
+Use restrained local contrast.
+
+Use restrained micro-contrast.
+
+Avoid excessive high-frequency enhancement.
+
+Avoid sharpening noise.
+
+Avoid sharpening grain.
+
+Avoid sharpening compression artifacts.
+
+Avoid sharpening reflections into isolated white dots.
+
+If the original image is already strongly sharpened, actively DE-SHARPEN and DE-HALO it before recovering useful detail.
+
+If necessary, slightly soften artificial high-frequency texture while preserving meaningful structural detail.
+
+The result should appear detailed because the information is clean and well reconstructed, not because every microscopic edge has been exaggerated.
+
+Allow the model to re-synthesize and redraw weak or degraded details more cleanly only when they are clearly supported by the source image structure.
+
+Reduce noise, compression artifacts, haze, unwanted motion blur, color smearing, banding, oversharpening, halos, ringing, false texture, and general softness.
+
+Restore natural photographic detail in hair, skin, fabric, surfaces, architecture, foliage, reflections, lights, water, pavement, and distant structures only when supported by the original image.
+
+Strengthen realism while keeping micro-contrast restrained enough to avoid artificial texture.
+
+Keep the output photorealistic, natural, clean, and faithful to the source.
+
+DEPTH OF FIELD & PORTRAIT MODE:
+
+Strictly analyze the depth of the scene and clearly separate the main foreground subject, especially people, from the background.
+
+Apply or enhance a high-end, realistic optical depth of field (portrait mode / bokeh effect) to isolate the main subject when appropriate.
+
+The main subject must be naturally sharp with clean recovered details, while the background should have a natural, beautiful, and optically convincing lens blur mimicking a fast portrait lens such as f/1.4 or f/1.8.
+
+Ensure precise edge detection around the subject, including hair, shoulders, clothing, and fine structural details, so the blur transition looks physical and photographic, not like a cheap software mask.
+
+Apply a gradual blur roll-off: objects slightly behind the subject should be slightly blurred, while distant backgrounds should be more strongly blurred.
+
+Do NOT blur objects or textures that are on the same focal plane as the subject.
+
+Do not compensate for background blur by oversharpening the main subject.
+
+CINEMATIC COLOR GRADING AND LIGHT REFINEMENT:
+
+CRITICAL: First, strictly analyze the original color palette, dominant hues, and lighting temperature of the photo.
+
+Base the entire cinematic color grade on this analysis.
+
+Extract the image’s INHERENT color scheme and amplify it into a highly visible, aggressive, and dramatic cinematic look.
+
+DO NOT force a generic “Teal & Orange” look or add unmotivated blue, cyan, or orange tints if they are not naturally supported by the original scene.
+
+The color correction must radically transform the visual mood and push tonal separation aggressively, but ONLY by exaggerating, deepening, and refining the colors that already exist in the source image.
+
+Enforce deep shadows and brilliant highlights to create strong visual impact, but preserve meaningful shadow information and keep hue shifts anchored to the original photograph’s reality.
+
+Intensify existing light sources, practical lights, glow, and genuine specular highlights dramatically based strictly on the materials and lighting direction identified in the analysis.
+
+IMPORTANT: Intensifying real light sources must NOT create additional tiny white dots, glitter, sparkles, false reflections, sharpening speckles, or artificial highlight particles.
+
+Enhance existing reflections as coherent photographic reflections, not as collections of microscopic bright points.
+
+Override the original photo’s flat or modest atmosphere with a powerful, deeply saturated, highly produced blockbuster aesthetic without changing its fundamental color DNA.
+
+While the colors are intensely amplified and highly stylized, skin tones and core material properties must remain believable within the newly established dramatic lighting.
+
+The cinematic grading must be a dominant, immediately obvious visual feature, feeling like a high-end, expensive grade tailored specifically for THIS scene, not a cheap preset applied over it.
+
+HARD CONSTRAINTS:
+
+Do NOT add new objects.
+Do NOT remove existing objects.
+Do NOT replace, redesign, move, reshape, or reinterpret objects or parts of the scene.
+Do NOT change composition, framing, crop, perspective, geometry, proportions, background layout, core lighting logic, or true scene structure.
+Do NOT change pose, anatomy, body shape, hairstyle, clothing design, text, logos, reflections, or shadows in a way that alters the original photo content.
+Do NOT turn the image into AI art, painting, CGI, beauty retouch, or stylized synthetic photography.
+Do NOT perform unrestricted full reconstruction from scratch.
+Do NOT hallucinate details that are not supported by the original photo.
+Do NOT introduce artificial grain as a substitute for genuine photographic texture.
+Do NOT add synthetic film grain unless it is extremely subtle and cannot appear as visible white dots.
+Do NOT add artificial sharpening artifacts.
+Do NOT add white speckles.
+Do NOT add bright pixel-sized dots.
+Do NOT add glitter-like texture.
+Do NOT add fake water droplets or sparkling reflections.
+Do NOT create excessive micro-texture.
+Do NOT oversharpen.
+
+FACE AND IDENTITY PROTECTION:
+
+If a person is present, preserve the person’s identity exactly.
+
+Do not alter facial structure, eyes, nose, lips, jawline, cheeks, skin tone, hairline, hair volume, expression, age, glasses, or any recognizable personal features.
+
+Do not beautify, idealize, or modify the person.
+
+The face must remain the same face.
+
+Denoising must not erase or reshape genuine facial features.
+
+Detail recovery must not invent new facial features, skin texture, eyelashes, pores, wrinkles, hair strands, or other identity-related details that are not supported by the source.
+
+DETAIL RECOVERY RULE:
+
+Recover detail only when it is clearly visible or strongly implied by the source image structure.
+
+If an area is partially degraded, blurred, compressed, noisy, or oversharpened, restore it with plausible CLEAN photographic detail that matches the existing forms.
+
+If stronger clarity is needed, the model may redraw the area more cleanly only as a tightly constrained reconstruction based on visible evidence from the original image.
+
+If an area is too ambiguous, too damaged, or truly unreadable, do not invent content.
+
+In such cases, keep the result soft, clean, subtle, and natural rather than fabricating detail.
+
+Prefer believable recovery over invention.
+Prefer slight natural softness over artificial sharpness.
+Prefer clean surfaces over noisy surfaces.
+Prefer coherent real texture over high-frequency synthetic texture.
+Prefer removal of questionable pixel-sized artifacts over amplification of them.
+
+BEHAVIOR FOR DIFFICULT REGIONS:
+
+Ambiguous regions must stay conservative.
+Missing regions must not be creatively filled.
+Weak detail may be enhanced or re-rendered more clearly, but only in harmony with the original forms.
+Uncertain textures must remain natural and restrained.
+Stronger perceived clarity must come from faithful reconstruction of supported detail, not from fantasy detail or aggressive sharpening.
+Dark regions must not be filled with generated noise or artificial texture.
+Reflective regions must not be filled with generated sparkles.
+Smooth regions must remain appropriately smooth.
+
+QUALITY TARGET:
+
+The result must look like the same exact photo, only cleaner, higher-resolution, naturally detailed, better graded, with realistic optical background blur when appropriate, more cinematic in light and color, and substantially improved in technical image quality.
+
+The image should look as though it came from a cleaner high-end camera sensor and superior lens, NOT as though an aggressive sharpening filter was applied.
+
+At 100% zoom, surfaces should remain clean and coherent.
+
+There should be NO excessive white dots, NO sharpening speckles, NO glitter-like artifacts, NO crunchy edges, NO visible sharpening halos, NO artificial high-frequency noise, and NO synthetic micro-texture.
+
+Real reflections and real highlights must remain recognizable and physically coherent, while false pixel-sized bright artifacts must be removed.
+
+Zero fabricated content.
+Zero redesign.
+Zero oversharpening artifacts.
+Zero newly generated white speckles.
+Maximum fidelity with strong but controlled enhancement, aggressive cleanup, natural detail recovery, cinematic polish, and source-faithful reconstruction.

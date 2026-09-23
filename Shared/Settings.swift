@@ -4,8 +4,13 @@ enum Settings {
     static let modelKey = "geminiModel"
     static let serverAddressKey = "serverAddress"
     static let serverAPIKeyKey = "serverAPIKey"
-    // Replace this instruction in a later iteration; no prompt editor in the extension.
-    static let prompt = "Process the attached photograph while preserving its subjects, faces and composition. Return the resulting photograph as an image, not a text description."
+    static var prompt: String {
+        guard let url = Bundle.main.url(forResource: "ImageEnhancementPrompt", withExtension: "txt"),
+              let value = try? String(contentsOf: url, encoding: .utf8), !value.isEmpty else {
+            fatalError("The bundled image enhancement prompt is missing.")
+        }
+        return value
+    }
     static var groupID: String { Bundle.main.object(forInfoDictionaryKey: "PhotoServerAppGroup") as? String ?? "group.64bb0d6b088653aa.3" }
     static var appGroupAvailable: Bool {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: groupID) != nil

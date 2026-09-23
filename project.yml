@@ -20,6 +20,8 @@ targets:
     sources:
       - App
       - Shared
+    resources:
+      - Shared/ImageEnhancementPrompt.txt
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID_PREFIX)
@@ -35,6 +37,8 @@ targets:
     sources:
       - PhotoEditingExtension
       - Shared
+    resources:
+      - Shared/ImageEnhancementPrompt.txt
     # PHEditingExtensionContext is created dynamically by the Photos host, so
     # importing PHContentEditingController alone does not guarantee the linker
     # retains PhotosUI.framework in the extension binary.

@@ -47,15 +47,49 @@ final class PhotoServerTests: XCTestCase {
             "Откроется одноразовая ссылка в окне Chrome на сервере. Войдите в Google, затем нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
         )
     }
-    func testInputBytesAreNotReencoded() throws {
+    func testInputIsNormalizedAndBundledPromptIsSent() throws {
         let data = png(), url = directory.appendingPathComponent("source.png")
         try data.write(to: url)
         let body = try GeminiClient.makeRequestFile(image: url, orientation: 6, model: "gemini-3.8-flash", directory: directory)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: body)) as? [String: Any])
         let encoded = try XCTUnwrap(object["image"] as? String)
-        XCTAssertEqual(Data(base64Encoded: String(encoded.split(separator: ",", maxSplits: 1)[1])), data)
+        let normalizedData = try XCTUnwrap(Data(base64Encoded: String(encoded.split(separator: ",", maxSplits: 1)[1])))
+        XCTAssertTrue(encoded.hasPrefix("data:image/jpeg;base64,"))
         XCTAssertEqual(object["model"] as? String, "gemini-3.8-flash")
-        XCTAssertEqual(object["input_orientation"] as? Int, 6)
+        XCTAssertEqual(object["input_orientation"] as? Int, 1)
+        XCTAssertEqual(object["prompt"] as? String, Settings.prompt)
+        XCTAssertTrue((object["prompt"] as? String)?.contains("Analyze the uploaded image first before generating the result.") == true)
+        let normalized = directory.appendingPathComponent("normalized.jpg")
+        try normalizedData.write(to: normalized)
+        let source = try ImageFiles.source(normalized)
+        let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+        XCTAssertEqual((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
+        XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, 24)
+        XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, 32)
+    }
+    func testPortraitAndLandscapeSourcesNormalizeForAllEXIFOrientations() throws {
+        for orientation in 1...8 {
+            let portrait = orientation.isMultiple(of: 2)
+            let size = portrait ? CGSize(width: 24, height: 32) : CGSize(width: 32, height: 24)
+            let data = UIGraphicsImageRenderer(size: size).pngData { context in
+                UIColor.blue.setFill(); context.fill(CGRect(origin: .zero, size: size))
+            }
+            let url = directory.appendingPathComponent("source-\(orientation).png")
+            try data.write(to: url)
+            let body = try GeminiClient.makeRequestFile(image: url, orientation: Int32(orientation), model: "gemini-test", directory: directory)
+            let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: body)) as? [String: Any])
+            let encoded = try XCTUnwrap(object["image"] as? String)
+            XCTAssertEqual(object["input_orientation"] as? Int, 1)
+            let normalized = directory.appendingPathComponent("normalized-\(orientation).jpg")
+            try XCTUnwrap(Data(base64Encoded: String(encoded.split(separator: ",", maxSplits: 1)[1]))).write(to: normalized)
+            let source = try ImageFiles.source(normalized)
+            let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+            XCTAssertEqual((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
+            let swapsDimensions = (5...8).contains(orientation)
+            let width = Int(size.width), height = Int(size.height)
+            XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, swapsDimensions ? height : width)
+            XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, swapsDimensions ? width : height)
+        }
     }
     func testPNGResultBecomesValidFullSizeJPEG() throws {
         let body = try JSONSerialization.data(withJSONObject: ["data": [["b64_json": png().base64EncodedString()]]])
@@ -80,19 +114,22 @@ final class PhotoServerTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: Settings.serverAddressKey), "http://127.0.0.1:4981")
         XCTAssertEqual(defaults.string(forKey: Settings.serverAPIKeyKey), "unit-key-with-sufficient-entropy")
     }
-    func testExifRotationIsBakedIntoPhotosOutput() throws {
-        let input = directory.appendingPathComponent("rotated.jpg")
-        let writer = try XCTUnwrap(CGImageDestinationCreateWithURL(input as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
+    func testAllEXIFOrientationsAreBakedIntoPhotosOutput() throws {
         let image = try XCTUnwrap(UIImage(data: png())?.cgImage)
-        CGImageDestinationAddImage(writer, image, [kCGImagePropertyOrientation: 6] as CFDictionary)
-        XCTAssertTrue(CGImageDestinationFinalize(writer))
-        let output = directory.appendingPathComponent("upright.jpg")
-        try ImageFiles.prepareJPEG(from: input, to: output)
-        let source = try ImageFiles.source(output)
-        let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
-        XCTAssertEqual((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
-        XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, image.height)
-        XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, image.width)
+        for orientation in 1...8 {
+            let input = directory.appendingPathComponent("input-\(orientation).jpg")
+            let writer = try XCTUnwrap(CGImageDestinationCreateWithURL(input as CFURL, UTType.jpeg.identifier as CFString, 1, nil))
+            CGImageDestinationAddImage(writer, image, [kCGImagePropertyOrientation: orientation] as CFDictionary)
+            XCTAssertTrue(CGImageDestinationFinalize(writer))
+            let output = directory.appendingPathComponent("upright-\(orientation).jpg")
+            try ImageFiles.prepareJPEG(from: input, to: output)
+            let source = try ImageFiles.source(output)
+            let props = try XCTUnwrap(CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any])
+            XCTAssertEqual((props[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1, 1)
+            let swapsDimensions = (5...8).contains(orientation)
+            XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, swapsDimensions ? image.height : image.width)
+            XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, swapsDimensions ? image.width : image.height)
+        }
     }
     func testConnectionUsingURLProtocol() async throws {
         let config = URLSessionConfiguration.ephemeral

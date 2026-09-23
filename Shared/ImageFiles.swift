@@ -29,6 +29,35 @@ enum ImageFiles {
         guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { throw PhotoError.message("Cannot prepare preview.") }
         return UIImage(cgImage: image)
     }
+    static func prepareUprightJPEG(from image: URL, orientation: Int32, to destination: URL) throws {
+        guard (1...8).contains(orientation) else { throw PhotoError.message("The source image has an invalid orientation.") }
+        let source = try source(image)
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
+        let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.int64Value ?? 0
+        let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.int64Value ?? 0
+        guard width > 0, height > 0, width <= Int64(Int.max) / height else {
+            throw PhotoError.message("The source image has invalid pixel dimensions.")
+        }
+        guard let cg = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: false] as CFDictionary) else {
+            throw PhotoError.message("The source image cannot be rendered for upload.")
+        }
+        let oriented = CIImage(cgImage: cg).oriented(forExifOrientation: orientation)
+        let extent = oriented.extent.integral
+        guard extent.width > 0, extent.height > 0 else { throw PhotoError.message("The source image has invalid oriented dimensions.") }
+        guard let space = cg.colorSpace.flatMap({ $0.model == .rgb ? $0 : nil }) ?? CGColorSpace(name: CGColorSpace.sRGB) else {
+            throw PhotoError.message("Cannot determine a color space for the source photograph.")
+        }
+        let context = CIContext(options: [.cacheIntermediates: false])
+        let flattened = oriented.composited(over: CIImage(color: .white)).cropped(to: extent)
+        guard let upright = context.createCGImage(flattened, from: extent, format: .RGBX8, colorSpace: space),
+              let writer = CGImageDestinationCreateWithURL(destination as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
+            throw PhotoError.message("Cannot prepare an upright source photograph for upload.")
+        }
+        CGImageDestinationAddImage(writer, upright, [kCGImageDestinationLossyCompressionQuality: 0.92, kCGImagePropertyOrientation: 1] as CFDictionary)
+        guard CGImageDestinationFinalize(writer) else { throw PhotoError.message("Cannot encode the upright source photograph.") }
+        let bytes = try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard bytes > 0, bytes <= maxInputBytes else { throw PhotoError.message("The upright source must be at most 25 MiB.") }
+    }
     static func prepareJPEG(from result: URL, to destination: URL) throws {
         let source = try source(result)
         let mime = try mime(result)
