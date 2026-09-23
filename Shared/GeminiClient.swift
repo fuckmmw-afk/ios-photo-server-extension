@@ -137,7 +137,7 @@ struct GeminiClient {
         struct Models: Decodable { struct Model: Decodable { let id: String }; let data: [Model]? }
         let models = try JSONDecoder().decode(Models.self, from: data).data ?? []
         guard !models.isEmpty else { throw PhotoError.message("The Gemini session has not published any available models. Check the server session.") }
-        return models
+        return models.map(\.id)
     }
 
     func checkConnection(model: String? = nil) async throws -> String {
