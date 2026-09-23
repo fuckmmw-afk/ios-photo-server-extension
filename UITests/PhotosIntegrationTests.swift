@@ -54,7 +54,9 @@ final class PhotosIntegrationTests: XCTestCase {
         }
         guard edit.waitForExistence(timeout: 8) else { XCTFail("Edit button unavailable after opening the confirmed Photos grid item."); return }
         edit.tap()
-        let more = photos.buttons["More"]
+        // Photos exposes this control by label in some runtimes but does not
+        // assign the same value as its accessibility identifier.
+        let more = photos.buttons.matching(NSPredicate(format: "label == %@", "More")).firstMatch
         guard more.waitForExistence(timeout: 5) else { XCTFail("More menu unavailable in this runtime's accessibility tree."); return }
         more.tap()
         let menu = XCTAttachment(screenshot: photos.screenshot())
