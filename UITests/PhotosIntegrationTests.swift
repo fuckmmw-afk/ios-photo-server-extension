@@ -35,10 +35,22 @@ final class PhotosIntegrationTests: XCTestCase {
         photoCenter.tap()
         let edit = photos.buttons["Edit"]
         if !edit.waitForExistence(timeout: 8) {
-            // Photos occasionally drops the first synthesized tap while it is
-            // finishing the initial library transition. The same identified
-            // photo is tapped again; the test still fails if Edit is absent.
-            photoCenter.tap()
+            // The "What's New" sheet can appear after the library grid is
+            // already visible. Its overlay intercepts the first photo tap.
+            if continueButton.waitForExistence(timeout: 3) {
+                continueButton.tap()
+                let dismissed = XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == false"), object: continueButton)
+                guard XCTWaiter.wait(for: [dismissed], timeout: 5) == .completed else {
+                    XCTFail("Photos onboarding did not dismiss after Continue.")
+                    return
+                }
+            }
+            let visiblePhoto = photos.images.matching(identifier: "PXGGridLayout-Info").firstMatch
+            guard visiblePhoto.waitForExistence(timeout: 8) else {
+                XCTFail("Photos grid disappeared before opening the photo.")
+                return
+            }
+            visiblePhoto.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         }
         guard edit.waitForExistence(timeout: 8) else { XCTFail("Edit button unavailable after opening the confirmed Photos grid item."); return }
         edit.tap()

@@ -1,6 +1,6 @@
 # PhotoServer
 
-Минимальный iOS 18+ клиент для обработки текущей фотографии через Gemini Web из Apple Photos. Репозиторий содержит приложение, Photo Editing Extension, общий Swift-код и воспроизводимую минимальную поправку к proxy, установленному в этой сессии. Старые серверные проекты не используются.
+Минимальный iOS 18+ клиент для обработки текущей фотографии через Gemini Web из Apple Photos. Репозиторий содержит приложение, Photo Editing Extension и общий Swift-код. Текущий backend на VPS находится в `/root/gemini-web-to-api`; прежний `server/image-input.patch` сохранён только как исторический артефакт и не описывает нынешнюю авторизацию.
 
 ## Пользовательский сценарий
 
@@ -30,7 +30,7 @@ Photos → PHContentEditingInput → исходный файл + EXIF orientatio
 
 ## Подключение
 
-Proxy слушает только `127.0.0.1:4981` на сервере. Для iPhone он должен быть доступен по HTTPS через gateway, который не снимает `X-PhotoServer-Key`. До публикации endpoint нужно применить `server/image-input.patch`, задать уникальный `PHOTOSERVER_API_KEY` и проверить 401 без ключа. Cookies Gemini на телефон не уходят. `localhost` на телефоне — это сам телефон, не VPS.
+Proxy слушает только `127.0.0.1:4981` на сервере. Для iPhone он доступен по HTTPS через gateway, который сохраняет `X-PhotoServer-Key`. Google-сессией управляет постоянный профиль Chrome на VPS, а не переменная `GEMINI_COOKIES`. В настройках приложения виден статус Gemini: при «Требуется вход» нажмите «Обновить вход Gemini» и вручную войдите в Google во временном браузере VPS. Одноразовую ссылку нужно открыть за минуту; если она истекла, нажмите кнопку снова. `localhost` на телефоне — это сам телефон, не VPS.
 
 В бинарнике нет адреса или ключа по умолчанию. Пользователь вводит HTTPS URL и API key один раз в приложении; они хранятся в App Group и доступны extension. HTTP разрешён только для loopback/SSH tunnel. Общего ATS bypass нет.
 
@@ -44,7 +44,7 @@ Proxy слушает только `127.0.0.1:4981` на сервере. Для i
 - Видео, Live Photos и RAW не поддерживаются в первой версии. iCloud-файл должен быть предоставлен Photos полностью.
 - Extension выполняет сетевой запрос в foreground с timeout 360 секунд. Apple может завершить процесс раньше при нехватке ресурсов; фиксированного гарантированного memory/time бюджета нет. Фонового завершения и сохранения после закрытия extension не обещаем.
 - Cancel отменяет URLSession и сохранение. Уже начавшаяся работа Google может завершиться на сервере. Автоматических повторных генераций со стороны клиента нет.
-- Ошибки сети, HTTP, квоты, истёкшей cookie, отсутствия изображения и декодирования показываются пользователю с Retry.
+- Ошибки сети, HTTP, квоты, истёкшей Gemini-сессии, отсутствия изображения и декодирования показываются пользователю с Retry.
 
 ## Идентификаторы
 
@@ -60,8 +60,8 @@ CI `.github/workflows/build-ios.yml` использует GitHub-hosted macOS, �
 
 `PhotoServer-unsigned.ipa` содержит `Payload/PhotoServer.app/PlugIns/PhotoEditingExtension.appex/`. Проверки: `unzip -l PhotoServer-unsigned.ipa`, `python3 scripts/verify-ipa.py PhotoServer-unsigned.ipa`; CI дополнительно проверяет отсутствие подписи через `codesign -d`.
 
-При push тега `v*` workflow прикрепляет IPA к GitHub Release. IPA намеренно unsigned: его нельзя непосредственно установить на физический iPhone без внешнего подписания, которое добавляет App Group entitlement. Нет ad-hoc signing, `.p12`, signing secrets или embedded.mobileprovision. Feather feed прекращён, чтобы не распространять неподдерживаемую сборку без App Group.
+При push в `main` workflow автоматически публикует unsigned IPA в [Feather source](https://raw.githubusercontent.com/fuckmmw-afk/PhotoServer-Feather/main/apps.json). При push тега `v*` он также прикрепляет IPA к GitHub Release. IPA нельзя непосредственно установить на физический iPhone без внешнего подписания, которое добавляет App Group entitlement. Нет ad-hoc signing, `.p12`, signing secrets или embedded.mobileprovision.
 
-Серверные изменения воспроизводятся по `server/README.md`. Ни пользовательские фото, ни cookies, ни артефакты сборки не коммитятся.
+`server/README.md` описывает только прежний patch, не текущий backend. Ни пользовательские фото, ни Google cookies, ни артефакты сборки не коммитятся в этот репозиторий.
 
 Политика обработки данных и обязанности оператора сервера: [`docs/privacy.md`](docs/privacy.md).

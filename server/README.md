@@ -1,4 +1,6 @@
-# Existing Gemini Web proxy patch
+# Historical Gemini Web proxy patch (deprecated)
+
+This patch predates the VPS browser-session manager and must not be applied to the current deployment. The active backend source is `/root/gemini-web-to-api` on the VPS. It uses a persistent Playwright browser profile and no `GEMINI_COOKIES` setting or separate cookie cache.
 
 Upstream: https://github.com/ntthanh2603/gemini-web-to-api
 
@@ -8,4 +10,4 @@ Pinned commit: `363317054e02068f7f3e72a7a97a83f9597457e3`.
 
 Reproduce in a fresh upstream checkout at that commit with `git apply /path/to/image-input.patch`. Generate a high-entropy key (for example, `openssl rand -hex 32`) and put it in the root-protected `.env` as `PHOTOSERVER_API_KEY=...`; do not copy it to GitHub or into the IPA. Then run `go test ./internal/modules/openai/... ./internal/commons/configs/...` and rebuild the existing Docker service. Verify both that an unauthenticated `GET /health` returns 401 and that `curl -H "X-PhotoServer-Key: $PHOTOSERVER_API_KEY" http://127.0.0.1:4981/health` returns 200.
 
-The service uses `HOST=127.0.0.1`, port 4981, one account and a 256 MiB memory ceiling. Keep the reverse proxy private to authenticated iOS clients; rate limiting is defense in depth, not authentication. Cookies and `PHOTOSERVER_API_KEY` live only in the root-protected `.env` and the provider's persistent cache. No public listener or new endpoint is introduced.
+This historical patch used `HOST=127.0.0.1`, port 4981, one account and a 256 MiB memory ceiling. It is retained for provenance only. Current Google session state lives in the mode-0700 Chrome profile on the VPS; `PHOTOSERVER_API_KEY` remains in the root-protected `.env`. The live service exposes authenticated `/api/gemini/auth/*` routes and a short-lived, token-protected browser login flow.
