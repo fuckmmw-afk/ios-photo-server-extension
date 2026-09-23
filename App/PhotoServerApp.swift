@@ -6,6 +6,8 @@ struct PhotoServerApp: App {
 }
 
 struct ConnectionView: View {
+    static let loginInstructions = "Откроется одноразовая ссылка в окне Chrome на сервере. В открывшемся окне войдите в Google, затем закройте окно Chrome. Мы проверим вход автоматически."
+
     @Environment(\.openURL) private var openURL
     @State private var address = Settings.address
     @State private var apiKey = Settings.apiKey
@@ -70,8 +72,9 @@ struct ConnectionView: View {
                     }
                     section("Gemini") {
                         Text(authLabel).font(.subheadline)
+                        Text(Self.loginInstructions).font(.footnote).foregroundStyle(.secondary)
                         if !authMessage.isEmpty { Text(authMessage).font(.footnote).foregroundStyle(.secondary) }
-                        Button("Обновить вход Gemini") { startLogin() }
+                        Button("Открыть ссылку для входа") { startLogin() }
                             .disabled(startingLogin)
                         Button("Проверить снова") { Task { await refreshAuthStatus(check: true) } }
                             .disabled(startingLogin)
@@ -99,10 +102,12 @@ struct ConnectionView: View {
             let configuration = try Settings.configuration(address: address, apiKey: apiKey)
             let status = try await GeminiClient(configuration: configuration).authStatus(check: check)
             authState = status.status
-            authMessage = status.message ?? ""
+            // The backend message is informational input from a remote server.
+            // Keep the login UI copy local and never render server-provided markup.
+            authMessage = ""
         } catch {
             authState = "network_error"
-            authMessage = error.localizedDescription
+            authMessage = "Не удалось получить статус Gemini. Проверьте соединение и попробуйте снова."
         }
     }
 
@@ -114,7 +119,7 @@ struct ConnectionView: View {
                 let configuration = try Settings.configuration(address: address, apiKey: apiKey)
                 let url = try await GeminiClient(configuration: configuration).createLoginSession()
                 authState = "login_in_progress"
-                authMessage = "Ожидание входа в браузере на сервере."
+                authMessage = "Ожидаем завершения входа. После закрытия окна Chrome мы проверим его автоматически."
                 if let url { openURL(url) }
                 authPolling?.cancel()
                 authPolling = Task { @MainActor in
@@ -126,7 +131,7 @@ struct ConnectionView: View {
                     }
                 }
             } catch {
-                authMessage = error.localizedDescription
+                authMessage = "Не удалось открыть ссылку. Проверьте соединение и попробуйте снова."
             }
         }
     }

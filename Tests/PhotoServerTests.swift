@@ -41,6 +41,12 @@ final class PhotoServerTests: XCTestCase {
             UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
         }
     }
+    func testGeminiLoginInstructionsTellUserToCloseChrome() {
+        XCTAssertEqual(
+            ConnectionView.loginInstructions,
+            "Откроется одноразовая ссылка в окне Chrome на сервере. В открывшемся окне войдите в Google, затем закройте окно Chrome. Мы проверим вход автоматически."
+        )
+    }
     func testInputBytesAreNotReencoded() throws {
         let data = png(), url = directory.appendingPathComponent("source.png")
         try data.write(to: url)
