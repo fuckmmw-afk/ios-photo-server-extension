@@ -126,7 +126,7 @@ struct GeminiClient {
         self.session = session ?? URLSession(configuration: sessionConfiguration)
     }
 
-    func checkConnection() async throws -> String {
+    func availableModels() async throws -> [String] {
         let request = authenticatedRequest(path: "openai/v1/models")
         let responseFile = FileManager.default.temporaryDirectory.appendingPathComponent("PhotoServer-models-\(UUID().uuidString).json")
         let collector = ResponseFileCollector(maximumBytes: Self.maximumResponseBytes, destination: responseFile)
@@ -136,8 +136,18 @@ struct GeminiClient {
         try Self.check(response, data: data)
         struct Models: Decodable { struct Model: Decodable { let id: String }; let data: [Model]? }
         let models = try JSONDecoder().decode(Models.self, from: data).data ?? []
-        guard models.contains(where: { $0.id == Settings.model }) else { throw PhotoError.message("The Gemini session has not published \(Settings.model). Check the server session.") }
-        return "Connected · \(Settings.model)"
+        guard !models.isEmpty else { throw PhotoError.message("The Gemini session has not published any available models. Check the server session.") }
+        return models
+    }
+
+    func checkConnection(model: String? = nil) async throws -> String {
+        let models = try await availableModels()
+        let selected = model ?? Settings.model
+        guard models.contains(selected) else {
+            guard let fallback = Settings.preferredModel(from: models) else { throw PhotoError.message("The Gemini session has not published any available models.") }
+            return "Connected · \(fallback)"
+        }
+        return "Connected · \(selected)"
     }
 
     struct AuthStatus: Decodable {
@@ -176,7 +186,7 @@ struct GeminiClient {
     }
 
     // Build a JSON upload file incrementally: no full-resolution UIImage, no giant JSON String.
-    static func makeRequestFile(image: URL, orientation: Int32, directory: URL) throws -> URL {
+    static func makeRequestFile(image: URL, orientation: Int32, model: String, directory: URL) throws -> URL {
         let size = try image.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
         guard size > 0, size <= ImageFiles.maxInputBytes else { throw PhotoError.message("The source must be at most 25 MiB. No image was resized.") }
         guard (1...8).contains(orientation) else { throw PhotoError.message("The source image has an invalid orientation.") }
@@ -189,7 +199,7 @@ struct GeminiClient {
         defer { try? writer.close() }
         let reader = try FileHandle(forReadingFrom: image)
         defer { try? reader.close() }
-        let fields: [String: Any] = ["model": Settings.model, "prompt": Settings.prompt, "n": 1, "response_format": "b64_json", "input_orientation": orientation]
+        let fields: [String: Any] = ["model": model, "prompt": Settings.prompt, "n": 1, "response_format": "b64_json", "input_orientation": orientation]
         var prefix = try JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys])
         prefix.removeLast()
         prefix.append(Data(",\"image\":\"data:\(mime);base64,".utf8))

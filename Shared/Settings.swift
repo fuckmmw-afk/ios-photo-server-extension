@@ -1,7 +1,7 @@
 import Foundation
 
 enum Settings {
-    static let model = "gemini-3.6-flash"
+    static let modelKey = "geminiModel"
     static let serverAddressKey = "serverAddress"
     static let serverAPIKeyKey = "serverAPIKey"
     // Replace this instruction in a later iteration; no prompt editor in the extension.
@@ -18,6 +18,35 @@ enum Settings {
     }
     static var address: String { (try? sharedDefaults())?.string(forKey: serverAddressKey) ?? "" }
     static var apiKey: String { (try? sharedDefaults())?.string(forKey: serverAPIKeyKey) ?? "" }
+    static var model: String { (try? sharedDefaults())?.string(forKey: modelKey) ?? "" }
+
+    static func saveModel(_ model: String, in defaults: UserDefaults? = nil) throws {
+        let storage: UserDefaults
+        if let defaults { storage = defaults } else { storage = try sharedDefaults() }
+        storage.set(model, forKey: modelKey)
+        storage.synchronize()
+    }
+
+    static func preferredModel(from available: [String]) -> String? {
+        let unique = Array(Set(available)).sorted()
+        func version(_ id: String) -> [Int] {
+            let suffix = id.split(separator: "-").dropFirst().first ?? ""
+            return suffix.split(separator: ".").compactMap { Int($0) }
+        }
+        return unique.sorted { lhs, rhs in
+            let lhsFlash = lhs.localizedCaseInsensitiveContains("flash")
+            let rhsFlash = rhs.localizedCaseInsensitiveContains("flash")
+            let lhsLite = lhs.localizedCaseInsensitiveContains("lite")
+            let rhsLite = rhs.localizedCaseInsensitiveContains("lite")
+            let lhsPreferred = lhsFlash && !lhsLite
+            let rhsPreferred = rhsFlash && !rhsLite
+            if lhsPreferred != rhsPreferred { return lhsPreferred }
+            if lhsFlash != rhsFlash { return lhsFlash }
+            let lv = version(lhs), rv = version(rhs)
+            if lv != rv { return lv.lexicographicallyPrecedes(rv) == false }
+            return lhs < rhs
+        }.first
+    }
 
     static func validatedURL(_ address: String) throws -> URL {
         guard let url = URL(string: address.trimmingCharacters(in: .whitespacesAndNewlines)),

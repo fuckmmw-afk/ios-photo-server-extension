@@ -9,6 +9,7 @@ struct ConnectionView: View {
     static let loginInstructions = "Откроется одноразовая ссылка в окне Chrome на сервере. Войдите в Google, затем нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
 
     @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
     @State private var address = Settings.address
     @State private var apiKey = Settings.apiKey
     @State private var message = ""
@@ -16,6 +17,8 @@ struct ConnectionView: View {
     @State private var authState = "verifying"
     @State private var authMessage = ""
     @State private var startingLogin = false
+    @State private var availableModels: [String] = []
+    @State private var selectedModel = Settings.model
     @State private var authPolling: Task<Void, Never>?
     var body: some View {
         NavigationStack {
@@ -33,9 +36,11 @@ struct ConnectionView: View {
                         TextField("https://photo.example.com", text: $address)
                             .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                             .textFieldStyle(.roundedBorder)
+                            .disabled(checking)
                         SecureField("PhotoServer API key", text: $apiKey)
                             .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.asciiCapable)
                             .textFieldStyle(.roundedBorder)
+                            .disabled(checking)
                         Button("Save and check connection") {
                             checking = true
                             Task {
@@ -49,13 +54,25 @@ struct ConnectionView: View {
                                         return
                                     }
                                     try Settings.save(configuration)
-                                    let connected = try await GeminiClient(configuration: configuration).checkConnection()
-                                    message = connected
-                                    await refreshAuthStatus()
+                                    let models = try await GeminiClient(configuration: configuration).availableModels()
+                                    availableModels = models.sorted()
+                                    if !models.contains(selectedModel) {
+                                        selectedModel = Settings.preferredModel(from: models) ?? ""
+                                    }
+                                    guard !selectedModel.isEmpty else { throw PhotoError.message("The server did not publish any usable models.") }
+                                    try Settings.saveModel(selectedModel)
+                                    message = "Connected · \(selectedModel)"
+                                    authState = "authenticated"
+                                    authMessage = ""
                                 } catch {
                                     if let configuration {
                                         Diagnostics.report(configuration: configuration, operation: "connection_check", error: error)
-                                        await refreshAuthStatus()
+                                        if Self.isUnavailable(error) {
+                                            authState = "server_unavailable"
+                                            authMessage = "Сервер Gemini временно недоступен. Повторите проверку позже."
+                                        } else {
+                                            await refreshAuthStatus(check: true)
+                                        }
                                     }
                                     message = error.localizedDescription
                                 }
@@ -63,6 +80,15 @@ struct ConnectionView: View {
                         }.disabled(checking)
                         if checking { ProgressView() }
                         if !message.isEmpty { Text(message).font(.footnote) }
+                        if !availableModels.isEmpty {
+                            Picker("Gemini model", selection: $selectedModel) {
+                                ForEach(availableModels, id: \.self) { Text($0).tag($0) }
+                            }
+                            .onChange(of: selectedModel) { _, value in
+                                guard availableModels.contains(value) else { return }
+                                try? Settings.saveModel(value)
+                            }
+                        }
                         Text("Use HTTPS for a remote server. HTTP is allowed only for localhost or an SSH tunnel. The API key is shared only by this app and its Photos extension through the App Group.")
                             .font(.footnote).foregroundStyle(.secondary)
                         if !Settings.appGroupAvailable {
@@ -82,7 +108,26 @@ struct ConnectionView: View {
                     }
                 }.padding(20)
             }.navigationTitle("PhotoServer")
-        }.onAppear { Task { await refreshAuthStatus() } }
+        }
+        .onAppear {
+            Task {
+                await refreshAuthStatus(check: true)
+                if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                authPolling?.cancel()
+                authPolling = nil
+            } else if phase == .active {
+                Task {
+                    await refreshAuthStatus(check: true)
+                    if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                }
+            }
+        }
+        .onChange(of: address) { _, _ in invalidateServerState() }
+        .onChange(of: apiKey) { _, _ in invalidateServerState() }
     }
 
     private var authLabel: String {
@@ -92,6 +137,7 @@ struct ConnectionView: View {
         case "login_in_progress": return "Ожидание входа"
         case "verifying": return "Проверка"
         case "network_error": return "Ошибка сети"
+        case "server_unavailable": return "Сервер временно недоступен"
         default: return "Проверка"
         }
     }
@@ -106,9 +152,28 @@ struct ConnectionView: View {
             // Keep the login UI copy local and never render server-provided markup.
             authMessage = ""
         } catch {
-            authState = "network_error"
-            authMessage = "Не удалось получить статус Gemini. Проверьте соединение и попробуйте снова."
+            if Self.isUnavailable(error) {
+                authState = "server_unavailable"
+                authMessage = "Сервер Gemini временно недоступен. Повторите проверку позже."
+            } else {
+                authState = "network_error"
+                authMessage = "Не удалось получить статус Gemini. Проверьте соединение и попробуйте снова."
+            }
         }
+    }
+
+    private static func isUnavailable(_ error: Error) -> Bool {
+        error.localizedDescription.contains("HTTP 503")
+    }
+
+    private func invalidateServerState() {
+        authPolling?.cancel()
+        authPolling = nil
+        availableModels = []
+        selectedModel = ""
+        authState = "verifying"
+        authMessage = ""
+        message = ""
     }
 
     private func startLogin() {
@@ -121,17 +186,22 @@ struct ConnectionView: View {
                 authState = "login_in_progress"
                 authMessage = "После входа в Google нажмите в окне wrapper кнопку «Завершить вход и проверить». Сервер закроет Chrome и проверит вход."
                 if let url { openURL(url) }
-                authPolling?.cancel()
-                authPolling = Task { @MainActor in
-                    for _ in 0..<200 {
-                        try? await Task.sleep(for: .seconds(3))
-                        if Task.isCancelled { return }
-                        await refreshAuthStatus()
-                        if authState == "authenticated" || authState == "login_required" { return }
-                    }
-                }
+                startAuthPolling()
             } catch {
                 authMessage = "Не удалось открыть ссылку. Проверьте соединение и попробуйте снова."
+            }
+        }
+    }
+
+    private func startAuthPolling() {
+        authPolling?.cancel()
+        authPolling = Task { @MainActor in
+            for _ in 0..<200 {
+                if Task.isCancelled { return }
+                try? await Task.sleep(for: .seconds(3))
+                if Task.isCancelled { return }
+                await refreshAuthStatus(check: true)
+                if authState == "authenticated" || authState == "login_required" { return }
             }
         }
     }

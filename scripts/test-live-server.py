@@ -14,7 +14,19 @@ raw = args.source.read_bytes()
 mime = 'image/png' if raw.startswith(b'\x89PNG\r\n\x1a\n') else 'image/jpeg' if raw.startswith(b'\xff\xd8') else None
 if mime is None:
     raise SystemExit('Use a PNG/JPEG fixture for this test.')
-payload = {'model': 'gemini-3.6-flash', 'prompt': 'Edit the attached image: preserve its composition and change the blue circle to green. Return the edited image.', 'n': 1, 'response_format': 'b64_json', 'image': 'data:'+mime+';base64,'+base64.b64encode(raw).decode()}
+with urllib.request.urlopen(args.base_url+'/openai/v1/models', timeout=30) as response:
+    models = [model['id'] for model in json.load(response).get('data', [])]
+flash = [model for model in models if 'flash' in model.lower()]
+preferred = [model for model in flash if 'lite' not in model.lower()] or flash or models
+def version(model):
+    try:
+        return tuple(int(part) for part in model.split('-')[1].split('.'))
+    except (IndexError, ValueError):
+        return ()
+if not preferred:
+    raise SystemExit('The server did not publish any available models.')
+selected = max(preferred, key=lambda model: (version(model), model))
+payload = {'model': selected, 'prompt': 'Edit the attached image: preserve its composition and change the blue circle to green. Return the edited image.', 'n': 1, 'response_format': 'b64_json', 'image': 'data:'+mime+';base64,'+base64.b64encode(raw).decode()}
 request = urllib.request.Request(args.base_url+'/openai/v1/images/generations', data=json.dumps(payload).encode(), headers={'Content-Type': 'application/json'}, method='POST')
 with urllib.request.urlopen(request, timeout=360) as response:
     body = json.load(response)
@@ -25,4 +37,4 @@ if extension is None:
 destination = args.output.with_suffix(extension)
 destination.parent.mkdir(parents=True, exist_ok=True)
 destination.write_bytes(result)
-print(json.dumps({'result': str(destination), 'bytes': len(result), 'source_bytes': len(raw)}))
+print(json.dumps({'result': str(destination), 'bytes': len(result), 'source_bytes': len(raw), 'model': selected}))

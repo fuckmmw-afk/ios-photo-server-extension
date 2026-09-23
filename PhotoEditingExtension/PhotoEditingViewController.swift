@@ -7,6 +7,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private var task: Task<Void, Never>?
     private var generation = UUID()
     private var result: URL?
+    private var processedModel = ""
     private var directory: URL?
     private var pending = false
     private let preview = UIImageView()
@@ -105,12 +106,17 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
             guard let self else { return }
             do {
                 try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
+                let client = GeminiClient(configuration: configuration)
+                let models = try await client.availableModels()
+                let model = models.contains(Settings.model) ? Settings.model : (Settings.preferredModel(from: models) ?? "")
+                guard !model.isEmpty else { throw PhotoError.message("The server did not publish any usable Gemini models.") }
+                try Settings.saveModel(model)
+                processedModel = model
                 let orientation = input.fullSizeImageOrientation
-                let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, orientation: orientation, directory: work) }
+                let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, orientation: orientation, model: model, directory: work) }
                 let request = try await withTaskCancellationHandler(operation: { try await preparation.value }, onCancel: { preparation.cancel() })
                 try Task.checkCancellation()
                 setStatus("Uploading and processing…")
-                let client = GeminiClient(configuration: configuration)
                 let file = try await client.process(requestFile: request, directory: work)
                 try Task.checkCancellation()
                 guard generation == attempt else { return }
@@ -174,7 +180,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
                 let destination = output.renderedContentURL
                 try await Task.detached { try FileManager.default.copyItem(at: result, to: destination) }.value
                 guard generation == attempt else { completionHandler(nil); return }
-                let metadata = try JSONSerialization.data(withJSONObject: ["version": 1, "model": Settings.model, "operation": "gemini-web"])
+                let metadata = try JSONSerialization.data(withJSONObject: ["version": 1, "model": processedModel, "operation": "gemini-web"])
                 output.adjustmentData = PHAdjustmentData(formatIdentifier: "com.example.PhotoServer.adjustment", formatVersion: "1.0", data: metadata)
                 completionHandler(output)
                 cleanup()

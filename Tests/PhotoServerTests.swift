@@ -50,11 +50,11 @@ final class PhotoServerTests: XCTestCase {
     func testInputBytesAreNotReencoded() throws {
         let data = png(), url = directory.appendingPathComponent("source.png")
         try data.write(to: url)
-        let body = try GeminiClient.makeRequestFile(image: url, orientation: 6, directory: directory)
+        let body = try GeminiClient.makeRequestFile(image: url, orientation: 6, model: "gemini-3.8-flash", directory: directory)
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: body)) as? [String: Any])
         let encoded = try XCTUnwrap(object["image"] as? String)
         XCTAssertEqual(Data(base64Encoded: String(encoded.split(separator: ",", maxSplits: 1)[1])), data)
-        XCTAssertEqual(object["model"] as? String, "gemini-3.6-flash")
+        XCTAssertEqual(object["model"] as? String, "gemini-3.8-flash")
         XCTAssertEqual(object["input_orientation"] as? Int, 6)
     }
     func testPNGResultBecomesValidFullSizeJPEG() throws {
@@ -97,14 +97,37 @@ final class PhotoServerTests: XCTestCase {
     func testConnectionUsingURLProtocol() async throws {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubProtocol.self]
-        StubProtocol.reply = (200, Data("{\"data\":[{\"id\":\"gemini-3.6-flash\"}]}".utf8))
+        StubProtocol.reply = (200, Data("{\"data\":[{\"id\":\"gemini-3.5-flash-lite\"},{\"id\":\"gemini-3.8-flash\"},{\"id\":\"gemini-3.1-pro\"}]}".utf8))
         let client = GeminiClient(configuration: try Settings.configuration(address: "https://unit.test", apiKey: "unit-key-with-sufficient-entropy"), session: URLSession(configuration: config))
         let status = try await client.checkConnection()
         XCTAssertTrue(status.contains("Connected"))
+        XCTAssertTrue(status.contains("gemini-3.8-flash"))
+        let changed = try await client.checkConnection(model: "gemini-3.6-flash")
+        XCTAssertTrue(changed.contains("gemini-3.8-flash"))
         XCTAssertEqual(StubProtocol.lastRequest?.value(forHTTPHeaderField: "X-PhotoServer-Key"), "unit-key-with-sufficient-entropy")
         StubProtocol.reply = (429, Data("{\"error\":{\"message\":\"Quota exhausted\"}}".utf8))
         do { _ = try await client.checkConnection(); XCTFail("Should fail") }
         catch { XCTAssertTrue(error.localizedDescription.contains("429")) }
+    }
+
+    func testDynamicModelFallbackUsesNewestFullFlashAndRequestCanChangeModel() throws {
+        let current = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-3.1-pro"]
+        XCTAssertEqual(Settings.preferredModel(from: current), "gemini-3.8-flash")
+        XCTAssertEqual(Settings.preferredModel(from: ["gemini-3.5-flash-lite", "gemini-3.1-pro"]), "gemini-3.5-flash-lite")
+        XCTAssertNil(Settings.preferredModel(from: []))
+        try Settings.saveModel("gemini-3.8-flash", in: defaults)
+        XCTAssertEqual(defaults.string(forKey: Settings.modelKey), "gemini-3.8-flash")
+    }
+
+    func testGeminiAuth503IsSurfacedAsUnavailable() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubProtocol.self]
+        StubProtocol.reply = (503, Data("{\"error\":{\"message\":\"session unavailable\"}}".utf8))
+        let client = GeminiClient(configuration: try Settings.configuration(address: "https://unit.test", apiKey: "unit-key-with-sufficient-entropy"), session: URLSession(configuration: config))
+        do { _ = try await client.authStatus(check: true); XCTFail("Expected an unavailable response") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("HTTP 503")) }
+        do { _ = try await client.availableModels(); XCTFail("Unavailable models must not trigger a stale-model fallback") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("HTTP 503")) }
     }
 
     func testGeminiAuthStatusAndOneTimeBrowserLink() async throws {
