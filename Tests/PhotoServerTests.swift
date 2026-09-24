@@ -48,6 +48,19 @@ final class PhotoServerTests: XCTestCase {
             UIColor.blue.setFill(); context.fill(CGRect(origin: .zero, size: size))
         }
     }
+    func jpeg(width: Int, height: Int) throws -> Data {
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+        let context = try XCTUnwrap(CGContext(data: nil, width: width, height: height, bitsPerComponent: 8,
+            bytesPerRow: width * 4, space: colorSpace, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+        context.setFillColor(UIColor.systemTeal.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        let image = try XCTUnwrap(context.makeImage())
+        let output = NSMutableData()
+        let writer = try XCTUnwrap(CGImageDestinationCreateWithData(output, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(writer, image, [kCGImageDestinationLossyCompressionQuality: 0.9] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(writer))
+        return output as Data
+    }
     func testGeminiLoginInstructionsTellUserToUseWrapperButton() {
         XCTAssertEqual(
             ConnectionView.loginInstructions,
@@ -105,6 +118,41 @@ final class PhotoServerTests: XCTestCase {
         let image = try XCTUnwrap(UIImage(contentsOfFile: output.path))
         XCTAssertEqual(image.size.width, 32 * UIScreen.main.scale)
         XCTAssertEqual(image.size.height, 24 * UIScreen.main.scale)
+    }
+    func testTwelveMegapixelUprightJPEGIsCopiedWithoutResizing() throws {
+        let source = directory.appendingPathComponent("gemini-12mp.jpg")
+        let output = directory.appendingPathComponent("photos-12mp.jpg")
+        let original = try jpeg(width: 3024, height: 4032)
+        try original.write(to: source)
+
+        XCTAssertEqual(try ImageFiles.pixelDimensions(source).width, 3024)
+        XCTAssertEqual(try ImageFiles.pixelDimensions(source).height, 4032)
+        try ImageFiles.prepareJPEG(from: source, to: output)
+
+        XCTAssertEqual(try ImageFiles.pixelDimensions(output).width, 3024)
+        XCTAssertEqual(try ImageFiles.pixelDimensions(output).height, 4032)
+        XCTAssertEqual(try Data(contentsOf: output), original, "An upright JPEG should pass through byte-for-byte.")
+    }
+    func testResolutionWarningComparesOrientedDimensionsAndRequiresAChoice() {
+        let source = ImageFiles.PixelDimensions(width: 3024, height: 4032)
+        XCTAssertTrue(ImageFiles.PixelDimensions(width: 896, height: 1195).isSmallerThan(source))
+        XCTAssertTrue(ImageFiles.PixelDimensions(width: 3000, height: 4100).isSmallerThan(source), "A loss in either oriented dimension needs a warning.")
+        XCTAssertFalse(ImageFiles.PixelDimensions(width: 4032, height: 3024).isSmallerThan(
+            ImageFiles.PixelDimensions(width: 4032, height: 3024)))
+
+        var consent = ResolutionConsent()
+        XCTAssertTrue(consent.mayApply, "Full-size results do not need a confirmation step.")
+        consent.presentWarning()
+        XCTAssertTrue(consent.needsChoice)
+        XCTAssertFalse(consent.mayApply, "Photos Done must not apply a smaller result before a choice.")
+        consent.choose(.applyAnyway)
+        XCTAssertTrue(consent.mayApply)
+
+        consent = ResolutionConsent()
+        consent.presentWarning()
+        consent.choose(.keepOriginal)
+        XCTAssertFalse(consent.mayApply)
+        XCTAssertTrue(consent.keepsOriginal)
     }
     func testInvalidResultsAndURLAreRejected() throws {
         XCTAssertThrowsError(try GeminiClient.decodeResult(Data("{\"data\":[]}".utf8), directory: directory))

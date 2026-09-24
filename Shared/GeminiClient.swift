@@ -262,6 +262,7 @@ struct GeminiClient {
         let url = directory.appendingPathComponent("result.image")
         try bytes.write(to: url, options: [.atomic, .completeFileProtection])
         guard ["image/jpeg", "image/png"].contains(try ImageFiles.mime(url)) else { throw PhotoError.message("Expected PNG or JPEG result.") }
+        ImageFiles.logDimensions("Decoded Gemini image", at: url)
         return url
     }
 }

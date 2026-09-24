@@ -10,10 +10,13 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private var processedModel = ""
     private var directory: URL?
     private var pending = false
+    private var resolutionConsent = ResolutionConsent()
     private let preview = UIImageView()
     private let status = UILabel()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let retry = UIButton(type: .system)
+    private let applyAnyway = UIButton(type: .system)
+    private let keepOriginal = UIButton(type: .system)
 
     override func loadView() {
         // Photos may ask the principal class for its view before viewDidLoad.  A
@@ -39,9 +42,17 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         retry.setTitle("Retry", for: .normal)
         retry.addTarget(self, action: #selector(retryProcessing), for: .touchUpInside)
         retry.isHidden = true
+        applyAnyway.setTitle("Apply anyway", for: .normal)
+        applyAnyway.accessibilityIdentifier = "PhotoServerApplyAnyway"
+        applyAnyway.addTarget(self, action: #selector(applySmallerResult), for: .touchUpInside)
+        applyAnyway.isHidden = true
+        keepOriginal.setTitle("Keep original", for: .normal)
+        keepOriginal.accessibilityIdentifier = "PhotoServerKeepOriginal"
+        keepOriginal.addTarget(self, action: #selector(keepSourceImage), for: .touchUpInside)
+        keepOriginal.isHidden = true
         spinner.hidesWhenStopped = true
         spinner.startAnimating()
-        let stack = UIStackView(arrangedSubviews: [preview, spinner, status, retry])
+        let stack = UIStackView(arrangedSubviews: [preview, spinner, status, applyAnyway, keepOriginal, retry])
         stack.axis = .vertical
         stack.spacing = 16
         stack.alignment = .fill
@@ -78,6 +89,24 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     }
     @objc private func retryProcessing() { guard !pending else { return }; beginProcessing() }
 
+    @objc private func applySmallerResult() {
+        guard resolutionConsent.needsChoice else { return }
+        resolutionConsent.choose(.applyAnyway)
+        applyAnyway.isHidden = true
+        keepOriginal.isHidden = true
+        setStatus("Ready. Tap Done to apply the smaller result.")
+    }
+
+    @objc private func keepSourceImage() {
+        guard resolutionConsent.needsChoice else { return }
+        resolutionConsent.choose(.keepOriginal)
+        result = nil
+        applyAnyway.isHidden = true
+        keepOriginal.isHidden = true
+        cleanup()
+        setStatus("Original kept. Tap Done to finish.")
+    }
+
     private func beginProcessing() {
         task?.cancel()
         cleanup()
@@ -86,6 +115,7 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         let attempt = UUID()
         generation = attempt
         result = nil
+        resolutionConsent = ResolutionConsent()
         pending = true
         setProcessingUI()
         guard let input, input.mediaType == .image, !input.mediaSubtypes.contains(.photoLive), let source = input.fullSizeImageURL else {
@@ -125,14 +155,24 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
                 try Task.checkCancellation()
                 let image = try await Task.detached { try ImageFiles.preview(prepared) }.value
                 try Task.checkCancellation()
+                let originalDimensions = try ImageFiles.orientedPixelDimensions(source, orientation: orientation)
+                let outputDimensions = try ImageFiles.pixelDimensions(prepared)
+                let needsChoice = outputDimensions.isSmallerThan(originalDimensions)
                 guard generation == attempt else { return }
                 result = prepared
+                if needsChoice { resolutionConsent.presentWarning() }
                 DispatchQueue.main.async { [weak self] in
                     guard let self, self.generation == attempt else { return }
                     self.preview.image = image
                     self.pending = false
                     self.spinner.stopAnimating()
-                    self.status.text = "Ready. Tap Done to apply."
+                    if needsChoice {
+                        self.status.text = "The result is smaller in at least one dimension.\nGenerated: \(Self.dimensionLabel(outputDimensions))\nOriginal: \(Self.dimensionLabel(originalDimensions))\nChoose Apply anyway or Keep original."
+                        self.applyAnyway.isHidden = false
+                        self.keepOriginal.isHidden = false
+                    } else {
+                        self.status.text = "Ready. Tap Done to apply."
+                    }
                 }
                 try? FileManager.default.removeItem(at: request)
                 try? FileManager.default.removeItem(at: file)
@@ -166,6 +206,8 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.retry.isHidden = true
+            self.applyAnyway.isHidden = true
+            self.keepOriginal.isHidden = true
             self.spinner.startAnimating()
             self.status.text = "Preparing photograph…"
         }
@@ -174,11 +216,18 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
         let attempt = generation
         Task {
             await task?.value
+            guard resolutionConsent.mayApply else {
+                result = nil
+                cleanup()
+                completionHandler(nil)
+                return
+            }
             guard generation == attempt, let input, let result else { completionHandler(nil); return }
             do {
                 let output = PHContentEditingOutput(contentEditingInput: input)
                 let destination = output.renderedContentURL
                 try await Task.detached { try FileManager.default.copyItem(at: result, to: destination) }.value
+                ImageFiles.logDimensions("Photos renderedContentURL", at: destination)
                 guard generation == attempt else { completionHandler(nil); return }
                 let metadata = try JSONSerialization.data(withJSONObject: ["version": 1, "model": processedModel, "operation": "gemini-web"])
                 output.adjustmentData = PHAdjustmentData(formatIdentifier: "com.example.PhotoServer.adjustment", formatVersion: "1.0", data: metadata)
@@ -202,6 +251,10 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
     private func cleanup() {
         if let directory { try? FileManager.default.removeItem(at: directory) }
         directory = nil
+    }
+
+    private static func dimensionLabel(_ dimensions: ImageFiles.PixelDimensions) -> String {
+        String(format: "%lld × %lld (%.2f MP)", dimensions.width, dimensions.height, dimensions.megapixels)
     }
 
     private func removeOrphanedWorkDirectories() {
