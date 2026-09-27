@@ -19,6 +19,7 @@ struct ConnectionView: View {
     @State private var startingLogin = false
     @State private var availableModels: [String] = []
     @State private var selectedModel = Settings.model
+    @State private var selectedProvider = Settings.provider
     @State private var authPolling: Task<Void, Never>?
     var body: some View {
         NavigationStack {
@@ -33,6 +34,19 @@ struct ConnectionView: View {
                             .font(.footnote).foregroundStyle(.secondary)
                     }
                     section("Server connection") {
+                        Picker("Image provider", selection: $selectedProvider) {
+                            ForEach(ImageProvider.allCases) { provider in Text(provider.rawValue).tag(provider) }
+                        }
+                        .pickerStyle(.segmented)
+                        .onChange(of: selectedProvider) { _, value in
+                            try? Settings.saveProvider(value)
+                            availableModels = []
+                            message = ""
+                        }
+                        if selectedProvider == .codex {
+                            Text("Connection check confirms whether the PhotoServer worker is authenticated and serves codex-imagegen.")
+                                .font(.footnote).foregroundStyle(.secondary)
+                        }
                         TextField("https://photo.example.com", text: $address)
                             .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                             .textFieldStyle(.roundedBorder)
@@ -54,23 +68,30 @@ struct ConnectionView: View {
                                         return
                                     }
                                     try Settings.save(configuration)
-                                    let models = try await GeminiClient(configuration: configuration).availableModels()
-                                    availableModels = models.sorted()
-                                    if !models.contains(selectedModel) {
-                                        selectedModel = Settings.preferredModel(from: models) ?? ""
+                                    let client = GeminiClient(configuration: configuration)
+                                    if selectedProvider == .codex {
+                                        message = try await client.checkCodexAvailability()
+                                    } else {
+                                        let models = try await client.availableModels()
+                                        availableModels = models.sorted()
+                                        if !models.contains(selectedModel) {
+                                            selectedModel = Settings.preferredModel(from: models) ?? ""
+                                        }
+                                        guard !selectedModel.isEmpty else { throw PhotoError.message("The server did not publish any usable models.") }
+                                        try Settings.saveModel(selectedModel)
+                                        message = "Connected · \(selectedModel)"
+                                        authState = "authenticated"
                                     }
-                                    guard !selectedModel.isEmpty else { throw PhotoError.message("The server did not publish any usable models.") }
-                                    try Settings.saveModel(selectedModel)
-                                    message = "Connected · \(selectedModel)"
-                                    authState = "authenticated"
                                     authMessage = ""
                                 } catch {
                                     if let configuration {
                                         Diagnostics.report(configuration: configuration, operation: "connection_check", error: error)
                                         if Self.isUnavailable(error) {
                                             authState = "server_unavailable"
-                                            authMessage = "Сервер Gemini временно недоступен. Повторите проверку позже."
-                                        } else {
+                                            authMessage = selectedProvider == .gemini
+                                                ? "Сервер Gemini временно недоступен. Повторите проверку позже."
+                                                : "PhotoServer is temporarily unavailable. Try again later."
+                                        } else if selectedProvider == .gemini {
                                             await refreshAuthStatus(check: true)
                                         }
                                     }
@@ -80,7 +101,7 @@ struct ConnectionView: View {
                         }.disabled(checking)
                         if checking { ProgressView() }
                         if !message.isEmpty { Text(message).font(.footnote) }
-                        if !availableModels.isEmpty {
+                        if selectedProvider == .gemini && !availableModels.isEmpty {
                             Picker("Gemini model", selection: $selectedModel) {
                                 ForEach(availableModels, id: \.self) { Text($0).tag($0) }
                             }
@@ -96,7 +117,7 @@ struct ConnectionView: View {
                                 .font(.footnote).foregroundStyle(.secondary)
                         }
                     }
-                    section("Gemini") {
+                    if selectedProvider == .gemini { section("Gemini") {
                         Text(authLabel).font(.subheadline)
                         Text(Self.loginInstructions).font(.footnote).foregroundStyle(.secondary)
                         if !authMessage.isEmpty { Text(authMessage).font(.footnote).foregroundStyle(.secondary) }
@@ -105,14 +126,16 @@ struct ConnectionView: View {
                         Button("Проверить снова") { Task { await refreshAuthStatus(check: true) } }
                             .disabled(startingLogin)
                         if startingLogin { ProgressView() }
-                    }
+                    } }
                 }.padding(20)
             }.navigationTitle("PhotoServer")
         }
         .onAppear {
             Task {
-                await refreshAuthStatus(check: true)
-                if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                if selectedProvider == .gemini {
+                    await refreshAuthStatus(check: true)
+                    if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                }
             }
         }
         .onChange(of: scenePhase) { _, phase in
@@ -121,13 +144,27 @@ struct ConnectionView: View {
                 authPolling = nil
             } else if phase == .active {
                 Task {
-                    await refreshAuthStatus(check: true)
-                    if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                    if selectedProvider == .gemini {
+                        await refreshAuthStatus(check: true)
+                        if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                    }
                 }
             }
         }
         .onChange(of: address) { _, _ in invalidateServerState() }
         .onChange(of: apiKey) { _, _ in invalidateServerState() }
+        .onChange(of: selectedProvider) { _, provider in
+            if provider == .codex {
+                authPolling?.cancel()
+                authPolling = nil
+                authMessage = ""
+            } else {
+                Task {
+                    await refreshAuthStatus(check: true)
+                    if authState == "login_in_progress" || authState == "server_unavailable" { startAuthPolling() }
+                }
+            }
+        }
     }
 
     private var authLabel: String {

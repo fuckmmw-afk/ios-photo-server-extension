@@ -87,6 +87,22 @@ final class PhotoServerTests: XCTestCase {
         XCTAssertEqual((props[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue, 24)
         XCTAssertEqual((props[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue, 32)
     }
+    func testCodexRequestKeepsBundledPromptAndImageTransport() throws {
+        let source = directory.appendingPathComponent("source.png")
+        try fixturePNG(size: CGSize(width: 32, height: 24)).write(to: source)
+        let body = try GeminiClient.makeRequestFile(image: source, orientation: 1, model: ImageProvider.codex.model, directory: directory)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(contentsOf: body)) as? [String: Any])
+        XCTAssertEqual(object["model"] as? String, "codex-imagegen")
+        XCTAssertEqual(object["prompt"] as? String, Settings.prompt)
+        XCTAssertTrue((object["image"] as? String)?.hasPrefix("data:image/jpeg;base64,") == true)
+    }
+    func testCodexPreparedImageLimitDoesNotChangeGeminiLimit() throws {
+        let size = 20 * 1024 * 1024 + 1
+        XCTAssertThrowsError(try GeminiClient.validateNormalizedInputSize(size, model: "codex-imagegen")) { error in
+            XCTAssertTrue(error.localizedDescription.contains("20 MiB"))
+        }
+        XCTAssertNoThrow(try GeminiClient.validateNormalizedInputSize(size, model: "gemini-3.8-flash"))
+    }
     func testPortraitAndLandscapeSourcesNormalizeForAllEXIFOrientations() throws {
         for orientation in 1...8 {
             let portrait = orientation.isMultiple(of: 2)
@@ -207,6 +223,34 @@ final class PhotoServerTests: XCTestCase {
         XCTAssertNil(Settings.preferredModel(from: []))
         try Settings.saveModel("gemini-3.8-flash", in: defaults)
         XCTAssertEqual(defaults.string(forKey: Settings.modelKey), "gemini-3.8-flash")
+    }
+
+    func testProviderIsStoredSeparatelyAndCodexUsesFixedBackendModel() throws {
+        try Settings.saveModel("gemini-3.8-flash", in: defaults)
+        try Settings.saveProvider(.codex, in: defaults)
+        XCTAssertEqual(defaults.string(forKey: Settings.modelKey), "gemini-3.8-flash")
+        XCTAssertEqual(defaults.string(forKey: Settings.providerKey), ImageProvider.codex.rawValue)
+        XCTAssertEqual(ImageProvider.codex.model, "codex-imagegen")
+    }
+
+    func testCodexConnectionCheckUsesAuthenticatedProviderStatus() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubProtocol.self]
+        StubProtocol.reply = (200, Data("{\"status\":\"authenticated\",\"available\":true,\"model\":\"codex-imagegen\"}".utf8))
+        let client = GeminiClient(configuration: try Settings.configuration(address: "https://unit.test", apiKey: "unit-key-with-sufficient-entropy"), session: URLSession(configuration: config))
+        let status = try await client.checkCodexAvailability()
+        XCTAssertEqual(status, "Connected · Codex ImageGen (codex-imagegen)")
+        XCTAssertEqual(StubProtocol.lastRequest?.url?.path, "/api/providers/codex/status")
+        XCTAssertEqual(StubProtocol.lastRequest?.value(forHTTPHeaderField: "X-PhotoServer-Key"), "unit-key-with-sufficient-entropy")
+    }
+
+    func testCodexConnectionCheckRejectsUnavailableWorker() async throws {
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [StubProtocol.self]
+        StubProtocol.reply = (200, Data("{\"status\":\"unavailable\",\"available\":false,\"model\":\"codex-imagegen\"}".utf8))
+        let client = GeminiClient(configuration: try Settings.configuration(address: "https://unit.test", apiKey: "unit-key-with-sufficient-entropy"), session: URLSession(configuration: config))
+        do { _ = try await client.checkCodexAvailability(); XCTFail("Expected unavailable Codex worker") }
+        catch { XCTAssertTrue(error.localizedDescription.contains("currently unavailable")) }
     }
 
     func testGeminiAuth503IsSurfacedAsUnavailable() async throws {

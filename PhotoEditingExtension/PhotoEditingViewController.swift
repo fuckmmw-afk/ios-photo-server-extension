@@ -137,10 +137,16 @@ final class PhotoEditingViewController: UIViewController, PHContentEditingContro
             do {
                 try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true, attributes: [.protectionKey: FileProtectionType.complete])
                 let client = GeminiClient(configuration: configuration)
-                let models = try await client.availableModels()
-                let model = models.contains(Settings.model) ? Settings.model : (Settings.preferredModel(from: models) ?? "")
-                guard !model.isEmpty else { throw PhotoError.message("The server did not publish any usable Gemini models.") }
-                try Settings.saveModel(model)
+                let provider = Settings.provider
+                let model: String
+                if provider == .codex {
+                    model = provider.model
+                } else {
+                    let models = try await client.availableModels()
+                    model = models.contains(Settings.model) ? Settings.model : (Settings.preferredModel(from: models) ?? "")
+                    guard !model.isEmpty else { throw PhotoError.message("The server did not publish any usable Gemini models.") }
+                    try Settings.saveModel(model)
+                }
                 processedModel = model
                 let orientation = input.fullSizeImageOrientation
                 let preparation = Task.detached(priority: .userInitiated) { try GeminiClient.makeRequestFile(image: source, orientation: orientation, model: model, directory: work) }

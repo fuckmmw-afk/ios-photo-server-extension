@@ -2,6 +2,7 @@ import Foundation
 
 enum Settings {
     static let modelKey = "geminiModel"
+    static let providerKey = "imageProvider"
     static let serverAddressKey = "serverAddress"
     static let serverAPIKeyKey = "serverAPIKey"
     static var prompt: String {
@@ -24,6 +25,14 @@ enum Settings {
     static var address: String { (try? sharedDefaults())?.string(forKey: serverAddressKey) ?? "" }
     static var apiKey: String { (try? sharedDefaults())?.string(forKey: serverAPIKeyKey) ?? "" }
     static var model: String { (try? sharedDefaults())?.string(forKey: modelKey) ?? "" }
+    static var provider: ImageProvider { ImageProvider(rawValue: (try? sharedDefaults())?.string(forKey: providerKey) ?? "") ?? .gemini }
+
+    static func saveProvider(_ provider: ImageProvider, in defaults: UserDefaults? = nil) throws {
+        let storage: UserDefaults
+        if let defaults { storage = defaults } else { storage = try sharedDefaults() }
+        storage.set(provider.rawValue, forKey: providerKey)
+        storage.synchronize()
+    }
 
     static func saveModel(_ model: String, in defaults: UserDefaults? = nil) throws {
         let storage: UserDefaults
@@ -87,6 +96,13 @@ enum Settings {
         storage.set(configuration.apiKey, forKey: serverAPIKeyKey)
         storage.synchronize()
     }
+}
+
+enum ImageProvider: String, CaseIterable, Identifiable {
+    case gemini = "Gemini"
+    case codex = "Codex ImageGen"
+    var id: String { rawValue }
+    var model: String { self == .codex ? "codex-imagegen" : "" }
 }
 
 struct ServerConfiguration: Equatable {

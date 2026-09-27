@@ -113,6 +113,7 @@ private final class ResponseFileCollector: NSObject, URLSessionDataDelegate, URL
 struct GeminiClient {
     static let maximumResponseBytes = 18 * 1024 * 1024
     static let maximumResultBytes = 12 * 1024 * 1024
+    static let maximumCodexInputBytes = 20 * 1024 * 1024
 
     let configuration: ServerConfiguration
     let session: URLSession
@@ -148,6 +149,22 @@ struct GeminiClient {
             return "Connected · \(fallback)"
         }
         return "Connected · \(selected)"
+    }
+
+    func checkCodexAvailability() async throws -> String {
+        let request = authenticatedRequest(path: "api/providers/codex/status")
+        let (data, response) = try await session.data(for: request)
+        guard data.count <= 4096 else { throw PhotoError.message("Invalid Codex provider status response.") }
+        try Self.check(response, data: data)
+        struct ProviderStatus: Decodable { let status: String; let available: Bool?; let model: String? }
+        let status = try JSONDecoder().decode(ProviderStatus.self, from: data)
+        guard status.status == "authenticated", status.available == true, status.model == "codex-imagegen" else {
+            if status.status == "unauthenticated" {
+                throw PhotoError.message("The Codex worker is not authenticated. Sign in on the PhotoServer before using Codex ImageGen.")
+            }
+            throw PhotoError.message("Codex ImageGen is currently unavailable on the PhotoServer.")
+        }
+        return "Connected · Codex ImageGen (codex-imagegen)"
     }
 
     struct AuthStatus: Decodable {
@@ -193,6 +210,8 @@ struct GeminiClient {
         _ = try ImageFiles.mime(image)
         let normalized = directory.appendingPathComponent("upright-source.jpg")
         try ImageFiles.prepareUprightJPEG(from: image, orientation: orientation, to: normalized)
+        let normalizedSize = try normalized.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        try Self.validateNormalizedInputSize(normalizedSize, model: model)
         let mime = try ImageFiles.mime(normalized)
         let url = directory.appendingPathComponent("request.json")
         guard FileManager.default.createFile(atPath: url.path, contents: nil, attributes: [.protectionKey: FileProtectionType.complete]) else {
@@ -214,6 +233,16 @@ struct GeminiClient {
         }
         try writer.write(contentsOf: Data("\"}".utf8))
         return url
+    }
+
+    static func validateNormalizedInputSize(_ size: Int, model: String) throws {
+        guard size > 0 else { throw PhotoError.message("The normalized source image is empty.") }
+        if model == "codex-imagegen", size > maximumCodexInputBytes {
+            throw PhotoError.message("Codex ImageGen source image must be at most 20 MiB after normalization.")
+        }
+        guard size <= ImageFiles.maxInputBytes else {
+            throw PhotoError.message("The upright source must be at most 25 MiB.")
+        }
     }
 
     func process(requestFile: URL, directory: URL) async throws -> URL {
